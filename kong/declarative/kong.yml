@@ -1,0 +1,350 @@
+_format_version: "3.0"
+_transform: true
+
+# Demo DB-less configuration for the local Compose stack.
+# Secrets come from the bundled `env` vault: {vault://env/go-x} -> $GO_X.
+# Nothing here is the user's production configuration.
+
+consumers:
+  - username: runner
+    keyauth_credentials:
+      - key: "__RUNNER_APIKEY__"   # substituted by scripts/setup.sh (credential fields are not vault-referenceable)
+  - username: untrusted-client
+    keyauth_credentials:
+      - key: untrusted-client-key
+
+services:
+  - name: mock-llm
+    url: http://mock-llm:8080
+    routes:
+
+      # ---------------------------------------------------------------- 1
+      # Real bundled guardrail (ai-prompt-guard, regex) + ai-proxy to the mock LLM.
+      - name: ai-prompt-guard-route
+        paths: [ /ai/prompt-guard ]
+        strip_path: true
+        plugins:
+          - name: key-auth
+            config: { key_names: [ apikey ], hide_credentials: true }
+          - name: guardrail-observer
+            config:
+              environment: local
+              policy_version: "pg-v1"
+              runner_shared_secret: "{vault://env/go-runner-secret}"
+              capture_body_mode: bounded          # synthetic traffic only
+              max_capture_bytes: 2048
+          - name: guardrail-observer-tail
+            config: { capture_body_mode: bounded, max_capture_bytes: 2048 }
+          - name: ai-prompt-guard
+            config:
+              allow_all_conversation_history: true
+              deny_patterns:
+                - "(?i)ignore\\s+(all\\s+|any\\s+)?(previous|prior|above)\\s+instructions"
+                - "(?i)(reveal|print|show|dump)\\s+(me\\s+)?(your|the)\\s+system\\s+prompt"
+                - "(?i)\\b(ssn|social\\s+security\\s+number)s?\\b"
+                - "(?i)\\b(developer|dan)\\s+mode\\b"
+                - "(?i)exfiltrat(e|ion)\\s+.*(credential|secret|token)"
+          - name: ai-proxy
+            config:
+              route_type: llm/v1/chat
+              auth: { header_name: Authorization, header_value: "Bearer mock-key" }
+              logging: { log_statistics: true, log_payloads: false }
+              model:
+                provider: openai
+                name: mock-gpt
+                options:
+                  upstream_url: http://mock-llm:8080/v1/chat/completions
+          - name: http-log
+            config:
+              http_endpoint: "{vault://env/go-ingest-endpoint}"
+              method: POST
+              content_type: application/json
+              timeout: 5000
+              keepalive: 60000
+              queue:
+                max_batch_size: 50
+                max_coalescing_delay: 1
+                max_entries: 10000
+                max_retry_time: 120
+                initial_retry_delay: 0.5
+                max_retry_delay: 10
+
+      # ---------------------------------------------------------------- 2
+      # Synthetic fixture guardrails, block mode, input + output.
+      - name: ai-fixture-route
+        paths: [ /ai/fixture ]
+        strip_path: true
+        plugins:
+          - name: key-auth
+            config: { key_names: [ apikey ], hide_credentials: true }
+          - name: guardrail-observer
+            config:
+              environment: local
+              policy_version: "fx-block-v1"
+              runner_shared_secret: "{vault://env/go-runner-secret}"
+              capture_body_mode: bounded
+              max_capture_bytes: 2048
+          - name: guardrail-observer-tail
+            config: { capture_body_mode: bounded, max_capture_bytes: 2048 }
+          - name: fixture-input-guard
+            config: { mode: block }
+          - name: ai-proxy
+            config:
+              route_type: llm/v1/chat
+              auth: { header_name: Authorization, header_value: "Bearer mock-key" }
+              logging: { log_statistics: true, log_payloads: false }
+              model:
+                provider: openai
+                name: mock-gpt
+                options: { upstream_url: http://mock-llm:8080/v1/chat/completions }
+          - name: fixture-output-guard
+            config: { mode: block, enforce_delay_chunks: 0 }
+          - name: http-log
+            config:
+              http_endpoint: "{vault://env/go-ingest-endpoint}"
+              timeout: 5000
+              queue: { max_batch_size: 50, max_coalescing_delay: 1, max_entries: 10000, max_retry_time: 120 }
+
+      # ---------------------------------------------------------------- 3
+      # Fixtures in detect-only mode: detection without enforcement.
+      - name: ai-fixture-detect-route
+        paths: [ /ai/fixture-detect ]
+        strip_path: true
+        plugins:
+          - name: key-auth
+            config: { key_names: [ apikey ], hide_credentials: true }
+          - name: guardrail-observer
+            config:
+              environment: local
+              policy_version: "fx-detect-v1"
+              runner_shared_secret: "{vault://env/go-runner-secret}"
+              capture_body_mode: bounded
+          - name: guardrail-observer-tail
+            config: { capture_body_mode: bounded }
+          - name: fixture-input-guard
+            config: { mode: detect }
+          - name: ai-proxy
+            config:
+              route_type: llm/v1/chat
+              auth: { header_name: Authorization, header_value: "Bearer mock-key" }
+              logging: { log_statistics: true, log_payloads: false }
+              model:
+                provider: openai
+                name: mock-gpt
+                options: { upstream_url: http://mock-llm:8080/v1/chat/completions }
+          - name: fixture-output-guard
+            config: { mode: detect }
+          - name: http-log
+            config:
+              http_endpoint: "{vault://env/go-ingest-endpoint}"
+              timeout: 5000
+              queue: { max_batch_size: 50, max_coalescing_delay: 1, max_entries: 10000, max_retry_time: 120 }
+
+      # ---------------------------------------------------------------- 4
+      # Streaming leak: output guard blocks 2 chunks AFTER detection.
+      - name: ai-fixture-leak-route
+        paths: [ /ai/fixture-leak ]
+        strip_path: true
+        plugins:
+          - name: key-auth
+            config: { key_names: [ apikey ], hide_credentials: true }
+          - name: guardrail-observer
+            config:
+              environment: local
+              policy_version: "fx-leak-v1"
+              runner_shared_secret: "{vault://env/go-runner-secret}"
+              capture_body_mode: bounded
+          - name: guardrail-observer-tail
+            config: { capture_body_mode: bounded }
+          - name: fixture-input-guard
+            config: { mode: block }
+          - name: ai-proxy
+            config:
+              route_type: llm/v1/chat
+              auth: { header_name: Authorization, header_value: "Bearer mock-key" }
+              logging: { log_statistics: true, log_payloads: false }
+              model:
+                provider: openai
+                name: mock-gpt
+                options: { upstream_url: http://mock-llm:8080/v1/chat/completions }
+          - name: fixture-output-guard
+            config: { mode: block, enforce_delay_chunks: 2 }
+          - name: http-log
+            config:
+              http_endpoint: "{vault://env/go-ingest-endpoint}"
+              timeout: 5000
+              queue: { max_batch_size: 50, max_coalescing_delay: 1, max_entries: 10000, max_retry_time: 120 }
+
+      # ---------------------------------------------------------------- 5
+      # Short-circuit by an unrelated plugin before any guardrail runs.
+      - name: ai-short-circuit-route
+        paths: [ /ai/short-circuit ]
+        strip_path: true
+        plugins:
+          - name: key-auth
+            config: { key_names: [ apikey ], hide_credentials: true }
+          - name: guardrail-observer
+            config:
+              environment: local
+              policy_version: "fx-block-v1"
+              runner_shared_secret: "{vault://env/go-runner-secret}"
+          - name: request-termination
+            config: { status_code: 503, message: "maintenance" }
+          - name: fixture-input-guard
+            config: { mode: block }
+          - name: ai-proxy
+            config:
+              route_type: llm/v1/chat
+              auth: { header_name: Authorization, header_value: "Bearer mock-key" }
+              model:
+                provider: openai
+                name: mock-gpt
+                options: { upstream_url: http://mock-llm:8080/v1/chat/completions }
+          - name: http-log
+            config:
+              http_endpoint: "{vault://env/go-ingest-endpoint}"
+              timeout: 5000
+              queue: { max_batch_size: 50, max_coalescing_delay: 1, max_entries: 10000, max_retry_time: 120 }
+
+      # ---------------------------------------------------------------- 6
+      # Baseline for observer-overhead A/B: identical to route 2 minus observer/tail.
+      - name: ai-baseline-route
+        paths: [ /ai/baseline ]
+        strip_path: true
+        plugins:
+          - name: key-auth
+            config: { key_names: [ apikey ], hide_credentials: true }
+          - name: fixture-input-guard
+            config: { mode: block }
+          - name: ai-proxy
+            config:
+              route_type: llm/v1/chat
+              auth: { header_name: Authorization, header_value: "Bearer mock-key" }
+              logging: { log_statistics: true, log_payloads: false }
+              model:
+                provider: openai
+                name: mock-gpt
+                options: { upstream_url: http://mock-llm:8080/v1/chat/completions }
+          - name: fixture-output-guard
+            config: { mode: block, enforce_delay_chunks: 0 }
+          - name: http-log
+            config:
+              http_endpoint: "{vault://env/go-ingest-endpoint}"
+              timeout: 5000
+              queue: { max_batch_size: 50, max_coalescing_delay: 1, max_entries: 10000, max_retry_time: 120 }
+
+      # ---------------------------------------------------------------- 7
+      # Full chain with probes: fixture-input-guard (775) -> ai-prompt-guard (771) -> ai-proxy (770)
+      # -> fixture-output-guard (760), bracketed by the head (790), probes 773 / 765 / 750 and the tail (5).
+      # Used for ordinary (unsigned, no request-debug) traffic: see runner --passive and docs/probes.md.
+      - name: ai-chain-route
+        paths: [ /ai/chain ]
+        strip_path: true
+        plugins:
+          - name: key-auth
+            config: { key_names: [ apikey ], hide_credentials: true }
+          - name: guardrail-observer
+            config:
+              environment: local
+              policy_version: "chain-v1"
+              runner_shared_secret: "{vault://env/go-runner-secret}"
+              capture_body_mode: hash
+              guardrail_timeouts: { fixture-input-guard: 400 }
+          - name: guardrail-observer-tail
+            config: { capture_body_mode: hash }
+          - name: gro-probe-773
+          - name: gro-probe-765
+          - name: gro-probe-750
+          - name: fixture-input-guard
+            config: { mode: block }
+          - name: ai-prompt-guard
+            config:
+              allow_all_conversation_history: true
+              deny_patterns:
+                - "(?i)ignore\\s+(all\\s+|any\\s+)?(previous|prior|above)\\s+instructions"
+                - "(?i)(reveal|print|show|dump)\\s+(me\\s+)?(your|the)\\s+system\\s+prompt"
+          - name: ai-proxy
+            config:
+              route_type: llm/v1/chat
+              auth: { header_name: Authorization, header_value: "Bearer mock-key" }
+              logging: { log_statistics: true, log_payloads: false }
+              model:
+                provider: openai
+                name: mock-gpt
+                options: { upstream_url: http://mock-llm:8080/v1/chat/completions }
+          - name: fixture-output-guard
+            config: { mode: block, enforce_delay_chunks: 0 }
+          - name: http-log
+            config:
+              http_endpoint: "{vault://env/go-ingest-endpoint}"
+              timeout: 5000
+              queue: { max_batch_size: 50, max_coalescing_delay: 1, max_entries: 10000, max_retry_time: 120 }
+
+      # ---------------------------------------------------------------- 8
+      # Same traffic shape as route 7 but the input guardrail was "forgotten": a coverage gap on purpose.
+      - name: ai-chain-gap-route
+        paths: [ /ai/chain-gap ]
+        strip_path: true
+        plugins:
+          - name: key-auth
+            config: { key_names: [ apikey ], hide_credentials: true }
+          - name: guardrail-observer
+            config: { environment: local, policy_version: "chain-v1", runner_shared_secret: "{vault://env/go-runner-secret}" }
+          - name: guardrail-observer-tail
+          - name: ai-proxy
+            config:
+              route_type: llm/v1/chat
+              auth: { header_name: Authorization, header_value: "Bearer mock-key" }
+              logging: { log_statistics: true, log_payloads: false }
+              model:
+                provider: openai
+                name: mock-gpt
+                options: { upstream_url: http://mock-llm:8080/v1/chat/completions }
+          - name: http-log
+            config:
+              http_endpoint: "{vault://env/go-ingest-endpoint}"
+              timeout: 5000
+              queue: { max_batch_size: 50, max_coalescing_delay: 1, max_entries: 10000, max_retry_time: 120 }
+
+      # ---------------------------------------------------------------- 9
+      # A/B partner of route 2 for scripts/perf-probes.sh: the same plugins plus the three middle probes.
+      - name: ai-fixture-probes-route
+        paths: [ /ai/fixture-probes ]
+        strip_path: true
+        plugins:
+          - name: key-auth
+            config: { key_names: [ apikey ], hide_credentials: true }
+          - name: guardrail-observer
+            config:
+              environment: local
+              policy_version: "fx-block-v1"
+              runner_shared_secret: "{vault://env/go-runner-secret}"
+              capture_body_mode: bounded
+              max_capture_bytes: 2048
+          - name: guardrail-observer-tail
+            config: { capture_body_mode: bounded, max_capture_bytes: 2048 }
+          - name: gro-probe-773
+          - name: gro-probe-765
+          - name: gro-probe-750
+          - name: fixture-input-guard
+            config: { mode: block }
+          - name: ai-proxy
+            config:
+              route_type: llm/v1/chat
+              auth: { header_name: Authorization, header_value: "Bearer mock-key" }
+              logging: { log_statistics: true, log_payloads: false }
+              model:
+                provider: openai
+                name: mock-gpt
+                options: { upstream_url: http://mock-llm:8080/v1/chat/completions }
+          - name: fixture-output-guard
+            config: { mode: block, enforce_delay_chunks: 0 }
+          - name: http-log
+            config:
+              http_endpoint: "{vault://env/go-ingest-endpoint}"
+              timeout: 5000
+              queue: { max_batch_size: 50, max_coalescing_delay: 1, max_entries: 10000, max_retry_time: 120 }
+
+plugins:
+  - name: prometheus
+    config: { per_consumer: false, status_code_metrics: true, latency_metrics: true, bandwidth_metrics: true, upstream_health_metrics: false }

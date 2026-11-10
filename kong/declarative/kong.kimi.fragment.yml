@@ -1,0 +1,54 @@
+# Optional real-provider route, merged into kong.yml by scripts/setup.sh when
+# KIMI_API_KEY is set (env vault: {vault://env/go-kimi-auth-header} -> $GO_KIMI_AUTH_HEADER="Bearer $KIMI_API_KEY").
+# Moonshot's API follows the OpenAI chat-completions contract, so ai-proxy's
+# `openai` provider is used with upstream_url overridden.
+#   model id:  kimi-k3.1-pro   (alt: kimi-k3.1-pro-highspeed)
+#   base URL:  KIMI_BASE_URL (default https://api.moonshot.ai/v1; Kimi-for-Coding keys 'sk-kimi-…' use https://api.kimi.com/coding/v1)
+# Output-stage labels are NOT asserted on this route (model output is not
+# deterministic); the evaluator reports it in observe mode for the output
+# stage and in evaluate mode for the input guardrail only.
+
+  - name: kimi
+    url: __KIMI_BASE_URL__
+    routes:
+      - name: ai-kimi-route
+        paths: [ /ai/kimi ]
+        strip_path: true
+        plugins:
+          - name: key-auth
+            config: { key_names: [ apikey ], hide_credentials: true }
+          - name: guardrail-observer
+            config:
+              environment: local
+              policy_version: "pg-v1"
+              runner_shared_secret: "{vault://env/go-runner-secret}"
+              capture_body_mode: hash              # real model output: hashes only, no content capture
+          - name: guardrail-observer-tail
+            config: { capture_body_mode: hash }
+          - name: ai-prompt-guard
+            config:
+              allow_all_conversation_history: true
+              deny_patterns:
+                - "(?i)ignore\\s+(all\\s+|any\\s+)?(previous|prior|above)\\s+instructions"
+                - "(?i)(reveal|print|show|dump)\\s+(me\\s+)?(your|the)\\s+system\\s+prompt"
+                - "(?i)\\b(ssn|social\\s+security\\s+number)s?\\b"
+                - "(?i)\\b(developer|dan)\\s+mode\\b"
+                - "(?i)exfiltrat(e|ion)\\s+.*(credential|secret|token)"
+          - name: ai-proxy
+            config:
+              route_type: llm/v1/chat
+              auth:
+                header_name: Authorization
+                header_value: "{vault://env/go-kimi-auth-header}"   # "Bearer sk-..."
+              logging: { log_statistics: true, log_payloads: false }
+              model:
+                provider: openai
+                name: __KIMI_MODEL__
+                options:
+                  upstream_url: __KIMI_BASE_URL__/chat/completions
+                  max_tokens: 512
+          - name: http-log
+            config:
+              http_endpoint: "{vault://env/go-ingest-endpoint}"
+              timeout: 5000
+              queue: { max_batch_size: 50, max_coalescing_delay: 1, max_entries: 10000, max_retry_time: 120 }
