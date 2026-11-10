@@ -119,6 +119,15 @@ behaviour is scripted (the first overcatches a decoy marker, the second sometime
 what the panels show for those names says nothing about any real product. The generated folders are kept out of
 git. `scripts/gen-demo-guards.sh --remove` takes them away.
 
+### The demo console
+
+Set `DEMO_CONSOLE=true` in `.env`, restart the evaluator, and open `http://localhost:8800/demo`. It is a separate
+page for demos only: sliders for each stand-in (how much it lets slip, how much it overcatches, whether it fails
+open and its timeout), start/stop and mix of the mock traffic, an attack wave on demand, the prompt-capture
+switch and a button to refresh the findings, with the live chain beside it. Changes are applied through Kong's
+Admin API to the stand-ins on `/ai/named` only, and are gone when Kong restarts. It has no login and is not
+routed by the HTTPS front door; never enable it on an evaluator that can reach a real gateway's Admin API.
+
 In the chain view every guardrail has its own colour, used for its outline, its label and its table row.
 Colour is never a fill.
 

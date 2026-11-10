@@ -22,7 +22,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from . import adjudicate as adj
-from . import ingest, metrics, passive, translate
+from . import demo, ingest, metrics, passive, translate
 from .exporters import metrics_hooks
 from .exporters.otlp import OtlpConfig, OtlpLogs
 from .exporters.splunk import SplunkConfig, SplunkHEC
@@ -479,6 +479,11 @@ async def passive_translate(window_s: float | None = None, include_runs: bool = 
           "provider": doc["provider"], "headline": doc["headline"], "findings": doc["findings"]}
     _fanout(ev)
     return doc
+
+
+# separate, demo-only console (404 unless DEMO_CONSOLE=true); see demo.py
+demo.translate_now = passive_translate
+app.include_router(demo.router)
 
 
 @app.on_event("startup")

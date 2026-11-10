@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo console</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+/* Controls on the left, the live chain on the right. Colour marks things; nothing is filled. */
+:root { --ground:#f4f1ea; --ink:#1d1b1a; --muted:#5c574f; --hairline:#cfc8bb; --kong:#0b6f66; --warn:#b8401f; --ok:#1f6b3a;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif; --mono: ui-monospace, SFMono-Regular, Menlo, monospace; }
+@media (prefers-color-scheme: dark) { :root { color-scheme: dark; --ground:#17161a; --ink:#ece9e2; --muted:#aaa49b; --hairline:#3a383f; --kong:#4fc9bb; --warn:#ff8d68; --ok:#6fd296; } }
+:root[data-theme="dark"] { color-scheme: dark; --ground:#17161a; --ink:#ece9e2; --muted:#aaa49b; --hairline:#3a383f; --kong:#4fc9bb; --warn:#ff8d68; --ok:#6fd296; }
+:root[data-theme="light"] { color-scheme: light; --ground:#f4f1ea; --ink:#1d1b1a; --muted:#5c574f; --hairline:#cfc8bb; --kong:#0b6f66; --warn:#b8401f; --ok:#1f6b3a; }
+* { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
+body { background: var(--ground); color: var(--ink); font: 14px/1.45 var(--sans); }
+.app { height: 100%; display: grid; grid-template-columns: 400px minmax(0, 1fr); }
+.panel { overflow-y: auto; padding: 16px; border-right: 1px solid var(--hairline); display: flex; flex-direction: column; gap: 16px; }
+iframe { width: 100%; height: 100%; border: 0; }
+h1 { margin: 0; font-size: 17px; } h2 { margin: 0 0 8px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.note { font-size: 12px; color: var(--muted); margin: 2px 0 0; } .warnline { color: var(--warn); }
+.card { border: 1px solid var(--hairline); border-left: 3px solid var(--c, var(--hairline)); border-radius: 4px; padding: 10px 12px; }
+.card h3 { margin: 0 0 6px; font-size: 14px; color: var(--c, var(--ink)); }
+.row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 10px; margin-top: 8px; }
+.row label { font-size: 13px; } .row output { font: 600 12.5px var(--mono); min-width: 52px; text-align: right; }
+.row input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--c, var(--kong)); margin: 0; }
+.row small { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); }
+.check { display: flex; gap: 8px; align-items: center; margin-top: 10px; font-size: 13px; } .check input { accent-color: var(--c, var(--kong)); }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+button, a.btn { font: inherit; font-size: 13px; color: var(--ink); background: transparent; border: 1px solid var(--hairline); border-radius: 4px; padding: 6px 10px; cursor: pointer; text-decoration: none; }
+button:hover, a.btn:hover { border-color: var(--ink); } button:focus-visible, a.btn:focus-visible, input:focus-visible { outline: 2px solid var(--kong); outline-offset: 2px; }
+button.on { border-color: var(--ok); color: var(--ok); font-weight: 600; } button.stop { border-color: var(--warn); color: var(--warn); font-weight: 600; }
+button:disabled { opacity: .5; cursor: default; }
+.stat { font: 12px var(--mono); color: var(--muted); margin-top: 8px; white-space: pre-wrap; }
+#msg { font-size: 12.5px; min-height: 18px; } #msg.err { color: var(--warn); } #msg.ok { color: var(--ok); }
+@media (max-width: 900px) { .app { grid-template-columns: 1fr; grid-template-rows: auto 70vh; } .panel { border-right: 0; border-bottom: 1px solid var(--hairline); } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="panel">
+    <div>
+      <h1>Demo console</h1>
+      <p class="note">Knobs for the synthetic stand-in guardrails on <b id="route">the demo route</b> and for the mock traffic. Change one and watch the chain on the right. Nothing here touches a real guardrail.</p>
+      <p class="note warnline" id="kongerr" hidden></p>
+    </div>
+    <section><h2>Stand-in guardrails</h2><div id="guards" style="display:flex;flex-direction:column;gap:10px"></div></section>
+    <section>
+      <h2>Traffic</h2>
+      <div class="card">
+        <div class="btns"><button id="run">Start traffic</button><button id="wave">Attack wave, 60 s</button></div>
+        <div class="row"><label for="rps">Requests per second</label><output id="rps_o"></output><input type="range" id="rps" min="1" max="30" step="1"></div>
+        <div class="row"><label for="violation">Plain attacks</label><output id="violation_o"></output><input type="range" id="violation" min="0" max="50" step="1"><small>Share of requests carrying the marker the first guardrail looks for.</small></div>
+        <div class="row"><label for="obfuscated">Disguised attacks</label><output id="obfuscated_o"></output><input type="range" id="obfuscated" min="0" max="50" step="1"><small>Only the second guardrail looks for these.</small></div>
+        <div class="row"><label for="slow">Requests that hit a slow backend</label><output id="slow_o"></output><input type="range" id="slow" min="0" max="50" step="1"><small>Makes a guardrail that "fails open" wait for its timeout and then let the request through.</small></div>
+        <div class="stat" id="tstat"></div>
+      </div>
+    </section>
+    <section>
+      <h2>Monitoring</h2>
+      <div class="card">
+        <label class="check"><input type="checkbox" id="prompts"> Show the start of each prompt in Grafana</label>
+        <p class="note" id="prompts_note"></p>
+        <div class="btns" style="margin-top:10px"><button id="translate">Refresh the plain-language findings</button><a class="btn" id="grafana" target="_blank" rel="noopener" hidden>Open Grafana</a></div>
+        <p class="note" id="tnote"></p>
+      </div>
+    </section>
+    <div id="msg" role="status"></div>
+  </div>
+  <iframe id="chain" title="Guardrail chain, live"></iframe>
+</div>
+<script>
+(function () {
+"use strict";
+var $ = function (id) { return document.getElementById(id); };
+var PAL = ["#3b82f6", "#d946ef", "#f59e0b", "#10b981", "#06b6d4", "#84cc16"];   // same order as the chain view
+var theme = new URLSearchParams(location.search).get("theme");
+$("chain").src = "chain" + (theme ? "?theme=" + encodeURIComponent(theme) : "");
+var state = null, order = [], busy = false;
+function say(text, cls) { var m = $("msg"); m.textContent = text || ""; m.className = cls || ""; }
+function api(method, path, body) {
+  return fetch(path, { method: method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined })
+    .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.detail || r.statusText); return j; }); });
+}
+function pct(v) { return Math.round(v * 100) + "%"; }
+function slider(parent, label, hint, min, max, step, value, fmt, onset) {
+  var row = document.createElement("div"); row.className = "row"; var id = "s" + Math.random().toString(36).slice(2);
+  var l = document.createElement("label"); l.textContent = label; l.htmlFor = id; var o = document.createElement("output"); o.textContent = fmt(value);
+  var i = document.createElement("input"); i.type = "range"; i.id = id; i.min = min; i.max = max; i.step = step; i.value = value;
+  i.addEventListener("input", function () { o.textContent = fmt(+i.value); }); i.addEventListener("change", function () { onset(+i.value); });
+  row.appendChild(l); row.appendChild(o); row.appendChild(i);
+  if (hint) { var s = document.createElement("small"); s.textContent = hint; row.appendChild(s); }
+  parent.appendChild(row);
+}
+function setGuard(name, patch, what) {
+  say("Applying to Kong: " + name + " " + what + " …");
+  api("POST", "demo/guard/" + encodeURIComponent(name), patch).then(function () { say(name + " " + what + ". Kong reloaded.", "ok"); })
+    .catch(function (e) { say("Could not apply: " + e.message, "err"); refresh(true); });
+}
+function guards() {
+  var box = $("guards"); box.innerHTML = "";
+  var list = state.guards.slice().sort(function (a, b) { var ia = order.indexOf(a.name), ib = order.indexOf(b.name); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); });
+  if (!list.length) { box.textContent = "No stand-in guardrails on this route yet. Run scripts/gen-demo-guards.sh with two names, then reload Kong."; return; }
+  list.forEach(function (g, n) {
+    var c = document.createElement("div"); c.className = "card"; c.style.setProperty("--c", PAL[(order.indexOf(g.name) >= 0 ? order.indexOf(g.name) : n) % PAL.length]);
+    var h = document.createElement("h3"); h.textContent = g.name; c.appendChild(h);
+    slider(c, "Lets slip", "Share of the attacks it looks for that it lets through anyway.", 0, 1, 0.05, g.miss_rate, pct,
+           function (v) { setGuard(g.name, { miss_rate: v }, "now lets " + pct(v) + " slip"); });
+    slider(c, "Blocks more than it should", "Extra honest requests it blocks, per correct block.", 0, 2, 0.1, g.overcatch_ratio, pct,
+           function (v) { setGuard(g.name, { overcatch_ratio: v }, "now blocks " + pct(v) + " more than it should"); });
+    var ch = document.createElement("label"); ch.className = "check"; var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = g.fails_open;
+    cb.addEventListener("change", function () { setGuard(g.name, { fails_open: cb.checked }, cb.checked ? "now fails open on a slow backend" : "no longer fails open"); });
+    ch.appendChild(cb); ch.appendChild(document.createTextNode(" Fails open when its backend is slow")); c.appendChild(ch);
+    slider(c, "Its timeout", "", 100, 2000, 50, g.slow_ms, function (v) { return v + " ms"; },
+           function (v) { setGuard(g.name, { slow_ms: v }, "timeout is now " + v + " ms"); });
+    box.appendChild(c);
+  });
+}
+function traffic() {
+  var t = state.traffic, b = $("run");
+  b.textContent = t.running ? "Stop traffic" : "Start traffic"; b.className = t.running ? "stop" : "on";
+  $("wave").disabled = !t.running; $("wave").textContent = t.wave_seconds_left ? "Attack wave, " + t.wave_seconds_left + " s left" : "Attack wave, 60 s";
+  ["rps", "violation", "obfuscated", "slow"].forEach(function (k) { if (document.activeElement !== $(k)) $(k).value = t[k]; $(k + "_o").textContent = k === "rps" ? Math.round(t[k]) + "/s" : Math.round(t[k]) + "%"; });
+  var st = Object.keys(t.status).sort().map(function (k) { return k + ": " + t.status[k]; }).join("   ");
+  $("tstat").textContent = "sent " + t.sent + (st ? "\n" + st : "") + (t.error ? "\nlast error: " + t.error : "");
+}
+function render(full) {
+  $("route").textContent = state.route + " (" + state.path + ")";
+  var ke = $("kongerr"); ke.hidden = state.kong.ok; ke.textContent = state.kong.ok ? "" : state.kong.error;
+  if (full) guards();
+  traffic();
+  $("prompts").checked = state.show_prompts;
+  $("prompts_note").textContent = state.prompts_exported ? "Synthetic prompts only. Off means only a hash of each body leaves Kong."
+    : "The evaluator is not exporting prompt text (EXPORT_PROMPT_CHARS is 0), so this switch alone will not show any.";
+  $("tnote").textContent = "Translator: " + state.translator + ". Each refresh is one model call when a key is configured.";
+  var g = $("grafana"); if (state.grafana_url) { g.hidden = false; g.href = state.grafana_url.replace(/\/$/, "") + "/d/guardrail-live"; }
+}
+function refresh(full) {
+  return Promise.all([api("GET", "demo/state"), fetch("passive/summary?window_s=900").then(function (r) { return r.json(); }).catch(function () { return null; })])
+    .then(function (res) { state = res[0]; var r = res[1] && res[1].routes && res[1].routes[state.route];
+      if (r) order = r.chain.filter(function (c) { return c.kind === "guardrail" || c.kind === "candidate"; }).map(function (c) { return c.name; });
+      render(full); })
+    .catch(function (e) { say("Console is not reachable: " + e.message, "err"); });
+}
+function setTraffic(patch, text) { api("POST", "demo/traffic", patch).then(function (t) { state.traffic = t; traffic(); if (text) say(text, "ok"); }).catch(function (e) { say(e.message, "err"); }); }
+$("run").addEventListener("click", function () { var on = !state.traffic.running; setTraffic({ running: on }, on ? "Traffic started." : "Traffic stopped."); });
+$("wave").addEventListener("click", function () { setTraffic({ wave: true }, "Attack wave for the next 60 seconds: five times the attacks."); });
+["rps", "violation", "obfuscated", "slow"].forEach(function (k) {
+  $(k).addEventListener("input", function () { $(k + "_o").textContent = k === "rps" ? $(k).value + "/s" : $(k).value + "%"; });
+  $(k).addEventListener("change", function () { var p = {}; p[k] = +$(k).value; setTraffic(p); });
+});
+$("prompts").addEventListener("change", function () { var on = $("prompts").checked; say("Applying to Kong …");
+  api("POST", "demo/prompts", { on: on }).then(function () { say(on ? "Prompt capture on for this route." : "Prompt capture off: hashes only.", "ok"); }).catch(function (e) { say(e.message, "err"); refresh(true); }); });
+$("translate").addEventListener("click", function () { var b = $("translate"); b.disabled = true; say("Asking the translator …");
+  api("POST", "demo/translate").then(function (d) { say(d.error ? "Translator fell back to the offline text: " + d.error : "New findings: " + d.headline, d.error ? "err" : "ok"); })
+    .catch(function (e) { say(e.message, "err"); }).then(function () { b.disabled = false; }); });
+refresh(true); setInterval(function () { if (!busy) refresh(false); }, 3000);
+})();
+</script>
+</body>
+</html>
