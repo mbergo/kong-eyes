@@ -105,6 +105,23 @@ injection, PII and secret-shaped test strings are wrapped in a random benign req
 phases (normal, attack wave, quiet) unless `--steady`. `--mix`, `--stream` and `--prompts FILE` change the
 blend. It prints status codes per category and latency; the dashboard says which plugin answered.
 
+## Trying it with your own guardrail names
+
+```bash
+scripts/gen-demo-guards.sh onyx straiker      # any names; stand-ins, not the real products
+make up DESTINATION=grafana                   # rebuild and reload Kong
+scripts/mock-flow.py --path /ai/named
+```
+
+This puts synthetic stand-in guardrails with the names you give on the route `/ai/named`, with probes between
+them, so the dashboard and the chain view show your names before the real plugins are wired in. Their
+behaviour is scripted (the first overcatches a decoy marker, the second sometimes times out and fails open), so
+what the panels show for those names says nothing about any real product. The generated folders are kept out of
+git. `scripts/gen-demo-guards.sh --remove` takes them away.
+
+In the chain view every guardrail has its own colour, used for its outline, its label and its table row.
+Colour is never a fill.
+
 ## Seeing the prompts
 
 The dashboard has a "Requests, one by one" row: status, served or stopped by which plugin, gateway time,

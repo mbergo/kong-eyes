@@ -51,7 +51,7 @@ def stat(title, expr, x, y, w=6, h=4, unit="none", th=None, desc="", decimals=No
         d["decimals"] = decimals
     return {"id": nid(), "type": "stat", "title": title, "description": desc, "datasource": PROM, "gridPos": pos(x, y, w, h),
             "targets": [{"expr": expr, "refId": "A"}], "fieldConfig": {"defaults": d, "overrides": []},
-            "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "area",
+            "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value", "graphMode": "area",
                         "textMode": "value", "justifyMode": "center", "wideLayout": True}}
 
 

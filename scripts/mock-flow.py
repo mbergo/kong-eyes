@@ -20,6 +20,7 @@ def env(path=".env"):
     return out
 
 ap = argparse.ArgumentParser(); ap.add_argument("--minutes", type=float, default=20); ap.add_argument("--rps", type=float, default=4)
+ap.add_argument("--path", default="/ai/chain", help="route to load, e.g. /ai/named after scripts/gen-demo-guards.sh")
 a = ap.parse_args()
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 E = env(); u = urllib.parse.urlparse(f"http://localhost:{E.get('KONG_PROXY_PORT', '8000')}")
@@ -63,9 +64,9 @@ while time.time() - start < a.minutes * 60:
     t = time.time() - start; ph = phase(t)
     kinds, weights = zip(*MIX[ph].items()); kind = random.choices(kinds, weights)[0]
     who = "untrusted-client" if (ph == "attack" and kind in ("violation", "obfuscated", "regex")) or random.random() < 0.15 else "runner"
-    path = "/ai/chain-gap" if random.random() < 0.08 and kind in ("benign", "violation") else "/ai/chain"
+    path = "/ai/chain-gap" if random.random() < 0.08 and kind in ("benign", "violation") else a.path
     if retry_queue and random.random() < 0.6:            # a caller rephrasing after an overcatch
-        who, kind, path = retry_queue.pop(0), "benign", "/ai/chain"
+        who, kind, path = retry_queue.pop(0), "benign", a.path
     status = send(path, kind, who); sent += 1; by[(ph, status)] = by.get((ph, status), 0) + 1
     if kind == "decoy" and status == 403: retry_queue.append(who)
     if time.time() - last_report > 30:

@@ -100,15 +100,14 @@ ok ".env ready (profiles: ${PROFILES:-none})"
 # ------------------------------------------------------- Kong declarative config
 say "Generating kong/declarative/kong.generated.yml"
 APIKEY="$(getenv RUNNER_APIKEY)"
+# optional service fragments are inserted right under `services:`: the real-provider route, and the
+# stand-in guardrail route written by scripts/gen-demo-guards.sh
+FRAGS=""; [[ -n "$KIMI" ]] && FRAGS="kong/declarative/kong.kimi.fragment.yml"
+[[ -f kong/declarative/kong.demo.fragment.yml ]] && FRAGS="$FRAGS kong/declarative/kong.demo.fragment.yml"
 {
-  if [[ -n "$KIMI" ]]; then
-    # insert the real-provider service fragment right under `services:`
-    awk -v frag="kong/declarative/kong.kimi.fragment.yml" '
-      { print }
-      /^services:$/ && !done { while ((getline l < frag) > 0) print l; done=1 }' kong/declarative/kong.yml
-  else
-    cat kong/declarative/kong.yml
-  fi
+  awk -v frags="$FRAGS" '
+    { print }
+    /^services:$/ && !done { n = split(frags, f, " "); for (i = 1; i <= n; i++) while ((getline l < f[i]) > 0) print l; done=1 }' kong/declarative/kong.yml
 } | sed "s|__RUNNER_APIKEY__|$APIKEY|; s|__KIMI_BASE_URL__|$(getenv KIMI_BASE_URL)|g; s|__KIMI_MODEL__|$(getenv KIMI_MODEL)|g" > kong/declarative/kong.generated.yml
 ok "kong.generated.yml written$( [[ -n "$KIMI" ]] && echo " (includes /ai/kimi -> $(getenv KIMI_BASE_URL) model $(getenv KIMI_MODEL))" )"
 

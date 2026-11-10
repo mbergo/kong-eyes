@@ -153,7 +153,7 @@
       "lastNotNull"
      ]
     },
-    "colorMode": "background",
+    "colorMode": "value",
     "graphMode": "area",
     "textMode": "value",
     "justifyMode": "center",
@@ -215,7 +215,7 @@
       "lastNotNull"
      ]
     },
-    "colorMode": "background",
+    "colorMode": "value",
     "graphMode": "area",
     "textMode": "value",
     "justifyMode": "center",
@@ -272,7 +272,7 @@
       "lastNotNull"
      ]
     },
-    "colorMode": "background",
+    "colorMode": "value",
     "graphMode": "area",
     "textMode": "value",
     "justifyMode": "center",
@@ -329,7 +329,7 @@
       "lastNotNull"
      ]
     },
-    "colorMode": "background",
+    "colorMode": "value",
     "graphMode": "area",
     "textMode": "value",
     "justifyMode": "center",
@@ -386,7 +386,7 @@
       "lastNotNull"
      ]
     },
-    "colorMode": "background",
+    "colorMode": "value",
     "graphMode": "area",
     "textMode": "value",
     "justifyMode": "center",
@@ -443,7 +443,7 @@
       "lastNotNull"
      ]
     },
-    "colorMode": "background",
+    "colorMode": "value",
     "graphMode": "area",
     "textMode": "value",
     "justifyMode": "center",
@@ -500,7 +500,7 @@
       "lastNotNull"
      ]
     },
-    "colorMode": "background",
+    "colorMode": "value",
     "graphMode": "area",
     "textMode": "value",
     "justifyMode": "center",
@@ -562,7 +562,7 @@
       "lastNotNull"
      ]
     },
-    "colorMode": "background",
+    "colorMode": "value",
     "graphMode": "area",
     "textMode": "value",
     "justifyMode": "center",

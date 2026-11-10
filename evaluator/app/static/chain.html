@@ -23,20 +23,21 @@ body { background: var(--ground); color: var(--ink); font: 14px/1.45 var(--sans)
 canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 .labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .lbl { position: absolute; left: 0; top: 0; text-align: center; max-width: 150px; font-size: 11px; line-height: 1.25; font-weight: 600;
-  background: var(--surface); border: 1px solid var(--hairline); border-radius: 3px; padding: 2px 6px; }
+  background: transparent; border: 0; padding: 2px 6px; text-shadow: 0 0 3px var(--ground), 0 0 7px var(--ground), 0 0 12px var(--ground); }
 .lbl small { display: block; font: 400 10px var(--mono); color: var(--muted); white-space: nowrap; }
-.lbl.warn { border-color: var(--warn); } .lbl.warn b { color: var(--warn); }
+.lbl.warn b::after { content: " !"; color: var(--warn); }
 .lbl.probe { background: transparent; border-color: transparent; font: 400 10px var(--mono); color: var(--muted); }
 .hud { position: absolute; left: 16px; top: 12px; right: 16px; pointer-events: none; }
 .hud h1 { margin: 0; font-size: 17px; } .hud p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
-.rail { border-left: 1px solid var(--hairline); background: var(--surface); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.rail { border-left: 1px solid var(--hairline); background: transparent; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 h2 { margin: 0 0 6px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .seg { display: flex; flex-wrap: wrap; gap: 6px; }
 button { font: inherit; font-size: 12.5px; color: var(--ink); background: transparent; border: 1px solid var(--hairline); border-radius: 4px; padding: 4px 8px; cursor: pointer; }
-button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+button[aria-pressed="true"] { border-color: var(--kong); color: var(--kong); font-weight: 600; }
 button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .sig { border: 1px solid var(--hairline); border-left: 3px solid var(--probe); border-radius: 4px; padding: 7px 10px; font-size: 13px; }
-.sig.warn { border-left-color: var(--warn); } .sig .k { font: 600 10.5px var(--mono); color: var(--muted); }
+.sig.warn { border-left-color: var(--warn); } .sig .k { font: 600 10.5px var(--mono); color: var(--muted); } .sig.warn .k { color: var(--warn); }
+td.g { font-weight: 600; } td.g::before { content: ""; display: inline-block; width: 9px; height: 9px; border: 2px solid currentColor; border-radius: 2px; margin-right: 6px; }
 .list { display: flex; flex-direction: column; gap: 6px; }
 .note, label { font-size: 12px; color: var(--muted); } .head { font-weight: 600; }
 table { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -67,6 +68,10 @@ var $ = function (id) { return document.getElementById(id); };
 var stage = $("stage"), canvas = $("c"), ctx = canvas.getContext("2d"), labelsEl = $("labels");
 var col = {}, W = 1, H = 1, cam = {}, view = { theta: -0.3, phi: 1.0, dist: 46, tx: 0, ty: 1.6, tz: 0 };
 var data = null, route = null, boxes = [], labels = [];
+// one colour per guardrail, used for its box outline, its label and its table row; colour is never a fill
+var PAL = ["#3b82f6", "#d946ef", "#f59e0b", "#10b981", "#06b6d4", "#84cc16"], gcol = {};
+function paint() { gcol = {}; var r = route && data && data.routes[route]; if (!r) return; var i = 0;
+  (r.chain || []).forEach(function (c) { if (c.kind === "guardrail" || c.kind === "candidate") gcol[c.name] = PAL[i++ % PAL.length]; }); }
 function theme() { var cs = getComputedStyle(document.documentElement);
   ["ground","surface","raised","ink","muted","hairline","client","kong","model","probe","warn","ok"].forEach(function (k) { col[k] = cs.getPropertyValue("--" + k).trim(); }); }
 theme(); if (window.matchMedia) { var mq = matchMedia("(prefers-color-scheme: dark)"); if (mq.addEventListener) mq.addEventListener("change", theme); }
@@ -92,8 +97,8 @@ function drawBox(b, fill, alpha, edge, lw) {
   ctx.lineJoin = "round";
   faces.forEach(function (f) {
     ctx.beginPath(); ctx.moveTo(f[0][0][0], f[0][0][1]); for (var i = 1; i < 4; i++) ctx.lineTo(f[0][i][0], f[0][i][1]); ctx.closePath();
-    ctx.globalAlpha = alpha; ctx.fillStyle = fill; ctx.fill();
-    if (f[1]) { ctx.globalAlpha = f[1] * alpha; ctx.fillStyle = col.ink; ctx.fill(); }
+    if (fill) { ctx.globalAlpha = alpha; ctx.fillStyle = fill; ctx.fill();
+      if (f[1]) { ctx.globalAlpha = f[1] * alpha; ctx.fillStyle = col.ink; ctx.fill(); } }
     ctx.globalAlpha = 1; ctx.strokeStyle = edge; ctx.lineWidth = lw; ctx.stroke();
   });
 }
@@ -102,6 +107,7 @@ function pct(v) { return v == null ? "n/a" : Math.round(v * 100) + "%"; }
 function build() {
   boxes = []; labelsEl.innerHTML = ""; labels = [];
   if (!data || !route || !data.routes[route]) return;
+  paint();
   var r = data.routes[route], chain = (r.chain || []).filter(function (c) { return c.name !== "guardrail-observer" && c.name !== "guardrail-observer-tail" && c.kind !== "plugin"; });
   var warn = {}; (data.signals || []).forEach(function (s) { if (s.severity === "warn" && s.guardrail && (!s.route || s.route === route)) warn[s.guardrail] = true; });
   var items = [{ name: "client", kind: "end" }].concat(chain).concat([{ name: "model provider", kind: "end2" }]);
@@ -117,11 +123,12 @@ function build() {
     else if (c.kind === "probe") { h = 0.25; }
     else if (c.kind === "candidate") { h = 0.7; sub = "found on the route, not declared"; }
     else { h = 0.8; }
-    var edge = c.kind === "guardrail" || c.kind === "candidate" ? (warn[c.name] ? col.warn : col.kong) : c.kind === "router" || c.kind === "end2" ? col.model : c.kind === "probe" ? col.probe : col.client;
+    var edge = c.kind === "guardrail" || c.kind === "candidate" ? (gcol[c.name] || col.kong) : c.kind === "router" || c.kind === "end2" ? col.model : c.kind === "probe" ? col.probe : col.client;
     boxes.push({ x0: x, x1: x + w, y0: 0.3, y1: 0.3 + h, z0: c.kind === "probe" ? -1.6 : -1.1, z1: c.kind === "probe" ? 1.6 : 1.1, edge: edge,
-                 fill: warn[c.name] ? col.warn : col.surface, alpha: warn[c.name] ? 0.35 : c.kind === "probe" ? 0.4 : 1 });
+                 fill: null, alpha: 1, lw: warn[c.name] ? 3 : c.kind === "probe" ? 1 : 1.8 });
     var el = document.createElement("div"); el.className = "lbl" + (c.kind === "probe" ? " probe" : "") + (warn[c.name] ? " warn" : "");
     var b = document.createElement("b"); b.textContent = c.kind === "probe" ? String(c.priority) : (c.label || c.name);
+    if (c.kind !== "probe") b.style.color = edge;
     if (c.label && c.label !== c.name) el.title = c.name; el.appendChild(b);
     if (sub) { var s = document.createElement("small"); s.textContent = sub; el.appendChild(s); }
     labelsEl.appendChild(el); labels.push({ el: el, x: x + w / 2, y: 0.3 + h + 0.35, z: 0 });
@@ -133,11 +140,11 @@ function build() {
 function draw() {
   setCam(); ctx.clearRect(0, 0, W, H);
   var t = (boxes.total || 20) / 2 + 1.5;
-  drawBox({ x0: -t, x1: t, y0: 0, y1: 0.3, z0: -2.6, z1: 2.6 }, col.raised, 0.55, col.kong, 1.3);
+  drawBox({ x0: -t, x1: t, y0: 0, y1: 0.3, z0: -2.6, z1: 2.6 }, null, 1, col.hairline, 1.2);
   var p = proj(-t, 0.9, 0), q = proj(t, 0.9, 0);
   if (p && q) { ctx.strokeStyle = col.ok; ctx.globalAlpha = .5; ctx.lineWidth = 2; ctx.setLineDash([6, 5]); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; }
   boxes.slice().sort(function (a, b) { var da = Math.pow(a.x0 - cam.x, 2) + Math.pow(cam.z, 2), db = Math.pow(b.x0 - cam.x, 2) + Math.pow(cam.z, 2); return db - da; })
-    .forEach(function (b) { drawBox(b, b.fill, b.alpha, b.edge, 1.5); });
+    .forEach(function (b) { drawBox(b, b.fill, b.alpha, b.edge, b.lw || 1.5); });
   labels.forEach(function (l) { var p = proj(l.x, l.y, l.z); if (!p) { l.el.style.visibility = "hidden"; return; } l.el.style.visibility = "";
     l.el.style.transform = "translate(" + p[0].toFixed(1) + "px," + p[1].toFixed(1) + "px) translate(-50%,-100%)"; });
   requestAnimationFrame(draw);
@@ -151,9 +158,9 @@ function rail() {
   if (!names.length) rb.textContent = "No AI traffic in the window yet.";
   $("win").textContent = data.window.requests + " request(s) in the last " + Math.round(data.window.seconds / 60) + " min";
   var tbl = $("tbl"); tbl.innerHTML = "<tr><th>guardrail</th><th>reached</th><th>stopped</th><th>altered</th><th>p95 ms</th><th>fail-open?</th></tr>";
-  var r = route && data.routes[route];
+  var r = route && data.routes[route]; paint();
   (r ? r.guardrails_enabled : []).forEach(function (n) { var g = data.guardrails[n]; if (!g) return; var tr = document.createElement("tr");
-    [n, g.reached, g.blocked, g.enforced_inline, g.latency_ms ? g.latency_ms.p95 : "n/a", g.fail_open_suspects].forEach(function (v) { var td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+    [n, g.reached, g.blocked, g.enforced_inline, g.latency_ms ? g.latency_ms.p95 : "n/a", g.fail_open_suspects].forEach(function (v, i) { var td = document.createElement("td"); td.textContent = v; if (i === 0) { td.className = "g"; td.style.color = gcol[n] || ""; } tr.appendChild(td); });
     tbl.appendChild(tr); });
   var sg = $("signals"); sg.innerHTML = "";
   (data.signals || []).filter(function (s) { return !s.route || s.route === route || !route; }).forEach(function (s) {

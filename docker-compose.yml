@@ -20,7 +20,7 @@ services:
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /kong/declarative/kong.generated.yml
-      KONG_PLUGINS: bundled,guardrail-observer,guardrail-observer-tail,gro-probe-773,gro-probe-765,gro-probe-750,fixture-input-guard,fixture-output-guard
+      KONG_PLUGINS: bundled,guardrail-observer,guardrail-observer-tail,gro-probe-773,gro-probe-765,gro-probe-750,fixture-input-guard,fixture-output-guard${EXTRA_KONG_PLUGINS:-}
       KONG_PROXY_LISTEN: 0.0.0.0:8000
       KONG_ADMIN_LISTEN: 0.0.0.0:8001
       KONG_STATUS_LISTEN: 0.0.0.0:8100
