@@ -33,6 +33,8 @@ local function emit(ev)
   kong.log.set_serialize_value("guardrail_fixture.input", ev)
 end
 
+local overcatch_credit = 0   -- per worker: grows with every correct block, spent on benign requests
+
 local function find_marker(body, markers)
   for _, m in ipairs(markers or {}) do
     if body:find(m, 1, true) then return m end
@@ -67,7 +69,18 @@ function Guard:access(conf)
   end
 
   local hit = find_marker(body, conf.deny_markers)
-  local decoy = (not hit) and find_marker(body, conf.decoy_markers) or nil
+  local missed = false
+  if hit and (conf.miss_rate or 0) > 0 and math.random() < conf.miss_rate then
+    hit, missed = nil, true                      -- seeded false negative: saw it, let it slip
+    evidence.seeded_false_negative = true
+  end
+  local decoy = (not hit and not missed) and find_marker(body, conf.decoy_markers) or nil
+  if hit and (conf.overcatch_ratio or 0) > 0 then
+    overcatch_credit = overcatch_credit + conf.overcatch_ratio
+  elseif not hit and not decoy and not missed and overcatch_credit >= 1 then
+    overcatch_credit = overcatch_credit - 1      -- seeded false positive: a benign request blocked
+    decoy = "overcatch"
+  end
   if hit or decoy then
     evidence.matched_marker = hit or decoy
     evidence.seeded_false_positive = decoy ~= nil

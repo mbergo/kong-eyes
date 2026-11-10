@@ -68,7 +68,7 @@ while time.time() - start < a.minutes * 60:
     if retry_queue and random.random() < 0.6:            # a caller rephrasing after an overcatch
         who, kind, path = retry_queue.pop(0), "benign", a.path
     status = send(path, kind, who); sent += 1; by[(ph, status)] = by.get((ph, status), 0) + 1
-    if kind == "decoy" and status == 403: retry_queue.append(who)
+    if kind in ("decoy", "benign", "stream") and status == 403: retry_queue.append(who)   # an honest caller blocked by mistake tries again
     if time.time() - last_report > 30:
         last_report = time.time()
         print(f"{int(t)//60:02d}:{int(t)%60:02d} phase={ph:<8} sent={sent} " + " ".join(f"{k[0]}/{k[1]}={v}" for k, v in sorted(by.items())), flush=True); by = {}

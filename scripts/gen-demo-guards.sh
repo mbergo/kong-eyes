@@ -15,9 +15,10 @@
 # and `scripts/mock-flow.py --path /ai/named` for traffic.
 #
 # Scripted behaviour, so the panels have something to show:
-#   FIRST   blocks [[VIOLATION]] and, on purpose, the benign [[DECOY]] (overcatching)
-#   SECOND  blocks [[VIOLATION]] and the obfuscated [[VI0LATION]] the first one misses; on [[FIXTURE_SLOW]] it
-#           waits 400 ms and lets the request through without a decision (fail-open)
+#   FIRST   blocks [[VIOLATION]], and blocks 50% more than it should: one benign request for every two
+#           correct blocks (overcatching)
+#   SECOND  is the only one that looks for the obfuscated [[VI0LATION]], and lets 40% of those slip; on
+#           [[FIXTURE_SLOW]] it waits 400 ms and lets the request through without a decision (fail-open)
 #   others  block [[VIOLATION]] only
 # The generated plugin folders and the fragment are local: they are listed in .git/info/exclude, not committed.
 set -euo pipefail
@@ -62,8 +63,8 @@ exclude "$FRAG"
 
 guard_cfg() {  # $1 = index
   case "$1" in
-    0) echo '{ mode: block, deny_markers: [ "[[VIOLATION]]" ], decoy_markers: [ "[[DECOY]]" ], slow_markers: [] }';;
-    1) echo '{ mode: block, deny_markers: [ "[[VIOLATION]]", "[[VI0LATION]]" ], decoy_markers: [], slow_markers: [ "[[FIXTURE_SLOW]]" ], slow_ms: 400 }';;
+    0) echo '{ mode: block, deny_markers: [ "[[VIOLATION]]" ], decoy_markers: [], slow_markers: [], overcatch_ratio: 0.5 }';;
+    1) echo '{ mode: block, deny_markers: [ "[[VI0LATION]]" ], decoy_markers: [], slow_markers: [ "[[FIXTURE_SLOW]]" ], slow_ms: 400, miss_rate: 0.4 }';;
     *) echo '{ mode: block, deny_markers: [ "[[VIOLATION]]" ], decoy_markers: [], slow_markers: [] }';;
   esac
 }

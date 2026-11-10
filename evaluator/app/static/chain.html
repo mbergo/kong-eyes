@@ -50,7 +50,7 @@ th { color: var(--muted); font-weight: 400; }
 <div class="app">
   <div class="stage" id="stage">
     <canvas id="c"></canvas><div class="labels" id="labels"></div>
-    <div class="hud"><h1>Guardrail chain, live</h1><p id="sub">Request enters on the left. Box height is p95 time spent in that guardrail. Drag to orbit.</p></div>
+    <div class="hud"><h1>Guardrail chain, live</h1><p id="sub">Requests enter on the left as a wave; it shrinks where a guardrail stops some, and what was stopped bounces back in that guardrail's colour. Box height is p95 time in the guardrail. Drag to orbit.</p></div>
   </div>
   <aside class="rail">
     <section><h2>Route</h2><div class="seg" id="routes"></div></section>
@@ -69,6 +69,7 @@ var stage = $("stage"), canvas = $("c"), ctx = canvas.getContext("2d"), labelsEl
 var col = {}, W = 1, H = 1, cam = {}, view = { theta: -0.3, phi: 1.0, dist: 46, tx: 0, ty: 1.6, tz: 0 };
 var data = null, route = null, boxes = [], labels = [];
 // one colour per guardrail, used for its box outline, its label and its table row; colour is never a fill
+var flow = { req: 0, gs: [] }, STILL = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 var PAL = ["#3b82f6", "#d946ef", "#f59e0b", "#10b981", "#06b6d4", "#84cc16"], gcol = {};
 function paint() { gcol = {}; var r = route && data && data.routes[route]; if (!r) return; var i = 0;
   (r.chain || []).forEach(function (c) { if (c.kind === "guardrail" || c.kind === "candidate") gcol[c.name] = PAL[i++ % PAL.length]; }); }
@@ -108,6 +109,7 @@ function build() {
   boxes = []; labelsEl.innerHTML = ""; labels = [];
   if (!data || !route || !data.routes[route]) return;
   paint();
+  flow = { req: data.routes[route].requests || 0, gs: [] };
   var r = data.routes[route], chain = (r.chain || []).filter(function (c) { return c.name !== "guardrail-observer" && c.name !== "guardrail-observer-tail" && c.kind !== "plugin"; });
   var warn = {}; (data.signals || []).forEach(function (s) { if (s.severity === "warn" && s.guardrail && (!s.route || s.route === route)) warn[s.guardrail] = true; });
   var items = [{ name: "client", kind: "end" }].concat(chain).concat([{ name: "model provider", kind: "end2" }]);
@@ -124,6 +126,7 @@ function build() {
     else if (c.kind === "candidate") { h = 0.7; sub = "found on the route, not declared"; }
     else { h = 0.8; }
     var edge = c.kind === "guardrail" || c.kind === "candidate" ? (gcol[c.name] || col.kong) : c.kind === "router" || c.kind === "end2" ? col.model : c.kind === "probe" ? col.probe : col.client;
+    if ((c.kind === "guardrail" || c.kind === "candidate") && g) flow.gs.push({ x0: x, x1: x + w, col: edge, reached: g.reached || 0, stopped: (g.blocked || 0) + (g.enforced_inline || 0) });
     boxes.push({ x0: x, x1: x + w, y0: 0.3, y1: 0.3 + h, z0: c.kind === "probe" ? -1.6 : -1.1, z1: c.kind === "probe" ? 1.6 : 1.1, edge: edge,
                  fill: null, alpha: 1, lw: warn[c.name] ? 3 : c.kind === "probe" ? 1 : 1.8 });
     var el = document.createElement("div"); el.className = "lbl" + (c.kind === "probe" ? " probe" : "") + (warn[c.name] ? " warn" : "");
@@ -137,12 +140,35 @@ function build() {
   view.dist = Math.max(22, total * 1.08 / (0.536 * (W / H)));
   boxes.total = total;
 }
+// Traffic drawn as waves. The green wave travels left to right and its height is the share of requests still
+// alive at that point, so it shrinks behind every guardrail that stops something. What a guardrail stops comes
+// back towards the client as a smaller wave in that guardrail's colour.
+function alive(x) { if (!flow.req) return 0.5; var a = 1; for (var i = 0; i < flow.gs.length; i++) { var g = flow.gs[i]; if (x < g.x1) return a; a = Math.max(0, (g.reached - g.stopped) / flow.req); } return a; }
+function wave(x0, x1, height, dir, color, lw, alpha, z, phase, T) {
+  ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.globalAlpha = alpha; ctx.lineJoin = "round"; ctx.beginPath(); var on = false;
+  for (var x = x0; x <= x1 + 0.001; x += 0.18) {
+    var p = proj(x, 0.95 + height(x) * Math.sin(1.5 * x - dir * T * 2.6 + phase), z);
+    if (!p) { on = false; continue; }
+    if (on) ctx.lineTo(p[0], p[1]); else { ctx.moveTo(p[0], p[1]); on = true; }
+  }
+  ctx.stroke(); ctx.globalAlpha = 1;
+}
+function waves(t) {
+  var T = STILL ? 0 : performance.now() / 1000, main = function (x) { return 0.08 + 0.42 * alive(x); };
+  wave(-t, t, main, 1, col.client, 1.1, 0.5, -0.8, 2.1, T);
+  wave(-t, t, main, 1, col.client, 1.1, 0.5, 0.8, 4.2, T);
+  wave(-t, t, main, 1, col.ok, 2.2, 0.95, 0, 0, T);
+  flow.gs.forEach(function (g) {
+    var share = g.reached ? g.stopped / g.reached : 0; if (!share) return;
+    var from = g.x0 - 3.4, h = Math.min(0.5, 0.12 + share * 1.6);
+    wave(from, g.x0, function (x) { return h * (x - from) / 3.4; }, -1, g.col, 1.8, 0.95, 0, 0, T);
+  });
+}
 function draw() {
   setCam(); ctx.clearRect(0, 0, W, H);
   var t = (boxes.total || 20) / 2 + 1.5;
   drawBox({ x0: -t, x1: t, y0: 0, y1: 0.3, z0: -2.6, z1: 2.6 }, null, 1, col.hairline, 1.2);
-  var p = proj(-t, 0.9, 0), q = proj(t, 0.9, 0);
-  if (p && q) { ctx.strokeStyle = col.ok; ctx.globalAlpha = .5; ctx.lineWidth = 2; ctx.setLineDash([6, 5]); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; }
+  waves(t);
   boxes.slice().sort(function (a, b) { var da = Math.pow(a.x0 - cam.x, 2) + Math.pow(cam.z, 2), db = Math.pow(b.x0 - cam.x, 2) + Math.pow(cam.z, 2); return db - da; })
     .forEach(function (b) { drawBox(b, b.fill, b.alpha, b.edge, b.lw || 1.5); });
   labels.forEach(function (l) { var p = proj(l.x, l.y, l.z); if (!p) { l.el.style.visibility = "hidden"; return; } l.el.style.visibility = "";
