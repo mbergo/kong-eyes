@@ -9,7 +9,8 @@ while [[ $# -gt 0 ]]; do case "$1" in --route) ROUTE="$2"; shift 2;; --apply) AP
 : "${KONG_ADMIN_URL:?}"; [[ -n "$ROUTE" ]] || { echo "--route required" >&2; exit 2; }
 AUTH=(); [[ -n "${KONG_ADMIN_TOKEN:-}" ]] && AUTH=(-H "Kong-Admin-Token: $KONG_ADMIN_TOKEN")
 RID=$(curl -sS --fail-with-body "${AUTH[@]}" "$KONG_ADMIN_URL/routes/$ROUTE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
-for n in guardrail-observer-${RID:0:8} guardrail-observer-tail-${RID:0:8} guardrail-observer-log-${RID:0:8}; do
+PROBES=$(curl -sS "${AUTH[@]}" "$KONG_ADMIN_URL/routes/$RID/plugins?size=1000" | python3 -c 'import sys,json; print(" ".join(p["instance_name"] for p in json.load(sys.stdin)["data"] if p["name"].startswith("gro-probe-") and p.get("instance_name")))')
+for n in guardrail-observer-${RID:0:8} guardrail-observer-tail-${RID:0:8} guardrail-observer-log-${RID:0:8} $PROBES; do
   if curl -sS -o /dev/null -w '%{http_code}' "${AUTH[@]}" "$KONG_ADMIN_URL/plugins/$n" | grep -q 200; then
     if [[ $APPLY -eq 1 ]]; then curl -sS --fail-with-body "${AUTH[@]}" -X DELETE "$KONG_ADMIN_URL/plugins/$n" && echo "deleted $n"; else echo "would delete $n"; fi
   else echo "absent $n"; fi

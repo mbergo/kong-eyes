@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kong AI Gateway 3D Request Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: one screen. 3D stage on the left (orbitable layers, a packet walking the lifecycle),
+   a reading rail on the right (scenario, transport, current step, step list, component, legend). */
+:root {
+  --ground: #f4f1ea; --surface: #ffffff; --raised: #ebe6dc; --ink: #1d1b1a; --muted: #5c574f; --hairline: #cfc8bb;
+  --client: #2f5d9f; --kong: #0b6f66; --vendor: #9a6410; --model: #67409a; --obs: #46525e; --tel: #b8401f;
+  --allow: #1f6b3a; --block: #a1261f; --fail: #7a4f00; --stream: #67409a; --async: #46525e;
+  --on-accent: #ffffff;
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #17161a; --surface: #222126; --raised: #2b2a30; --ink: #ece9e2; --muted: #aaa49b; --hairline: #3a383f;
+    --client: #8db2ea; --kong: #4fc9bb; --vendor: #e9b654; --model: #bf9cec; --obs: #a2aeba; --tel: #ff8d68;
+    --allow: #6fd296; --block: #ff7a70; --fail: #e8b14a; --stream: #bf9cec; --async: #a2aeba;
+    --on-accent: #17161a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #17161a; --surface: #222126; --raised: #2b2a30; --ink: #ece9e2; --muted: #aaa49b; --hairline: #3a383f;
+  --client: #8db2ea; --kong: #4fc9bb; --vendor: #e9b654; --model: #bf9cec; --obs: #a2aeba; --tel: #ff8d68;
+  --allow: #6fd296; --block: #ff7a70; --fail: #e8b14a; --stream: #bf9cec; --async: #a2aeba;
+  --on-accent: #17161a;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--ground); color: var(--ink); font-family: var(--font-sans); font-size: 14px; line-height: 1.45; }
+.app { height: 100%; min-height: 520px; display: grid; grid-template-columns: minmax(0, 1fr) 372px; }
+.stage { position: relative; overflow: hidden; min-height: 0; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+.stage canvas.drag { cursor: grabbing; }
+.stage canvas.hit { cursor: pointer; }
+.labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.lbl { position: absolute; left: 0; top: 0; will-change: transform; text-align: center; max-width: 118px;
+  font-size: 10.5px; line-height: 1.2; font-weight: 600; color: var(--ink);
+  padding: 2px 5px; border: 1px solid transparent; border-radius: 3px; white-space: normal; transition: opacity .2s; }
+.lbl .tag { font-family: var(--font-mono); font-size: 8.5px; font-weight: 600; border: 1px solid currentColor; border-radius: 2px; padding: 0 2px; margin-left: 3px; vertical-align: 1px; }
+.lbl .tag.ee { color: var(--vendor); } .lbl .tag.new { color: var(--tel); }
+.lbl .note { display: block; font-family: var(--font-mono); font-size: 9.5px; margin-top: 1px; }
+.lbl.idle { opacity: .5; font-weight: 400; }
+.lbl.seen { background: var(--surface); border-color: var(--hairline); }
+.lbl.on { background: var(--ink); color: var(--ground); border-color: var(--ink); z-index: 3; }
+.lbl.on .tag { color: inherit; }
+.lbl .tag.new { color: var(--tel); } .lbl .note.block { color: var(--block); } .lbl .note.fail { color: var(--fail); } .lbl .note.allow { color: var(--allow); }
+.lbl.on .note { color: inherit; }
+.floor { position: absolute; left: 0; top: 0; will-change: transform; white-space: nowrap; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; }
+.floor.lane { color: var(--kong); font-family: var(--font-mono); letter-spacing: .02em; text-transform: none; font-weight: 400; opacity: .9; }
+.floor.c-client { color: var(--client); } .floor.c-kong { color: var(--kong); } .floor.c-vendor { color: var(--vendor); }
+.floor.c-model { color: var(--model); } .floor.c-obs { color: var(--obs); }
+.pk { position: absolute; left: 0; top: 0; will-change: transform; font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  min-width: 20px; height: 20px; line-height: 20px; text-align: center; border-radius: 10px; padding: 0 5px; color: var(--on-accent); background: var(--allow); z-index: 4; }
+.hint { position: absolute; left: 16px; bottom: 12px; font-size: 11.5px; color: var(--muted); background: var(--ground); padding: 2px 6px; border-radius: 3px; }
+.hud { position: absolute; left: 16px; top: 14px; right: 16px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; pointer-events: none; }
+.hud h1 { margin: 0; font-size: 17px; font-weight: 600; text-wrap: balance; }
+.hud span { font-size: 12px; color: var(--muted); }
+
+.rail { border-left: 1px solid var(--hairline); background: var(--surface); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+.rail h2 { margin: 0 0 6px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--hairline); border-radius: 4px; padding: 5px 9px; cursor: pointer; }
+button:hover { border-color: var(--ink); }
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.seg button { font-size: 12.5px; }
+.seg button i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+.transport { display: flex; gap: 6px; align-items: center; }
+.transport .count { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.now { border: 1px solid var(--hairline); border-left: 3px solid var(--allow); border-radius: 4px; padding: 10px 12px; }
+.now .k { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.now h3 { margin: 2px 0 6px; font-size: 15.5px; font-weight: 600; text-wrap: balance; }
+.now p { margin: 0 0 8px; }
+.now dl, .comp dl { margin: 0; display: grid; grid-template-columns: 52px 1fr; gap: 3px 8px; font-size: 12px; }
+dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
+dd code, .comp code { font-family: var(--font-mono); font-size: 11.5px; }
+ol.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+ol.steps li { display: grid; grid-template-columns: 24px 1fr; gap: 8px; align-items: baseline; padding: 4px 6px; border-radius: 3px; cursor: pointer; font-size: 13px; color: var(--muted); }
+ol.steps li:hover { background: var(--raised); }
+ol.steps li b { font-family: var(--font-mono); font-size: 11px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+ol.steps li.done { color: var(--ink); }
+ol.steps li.cur { color: var(--ink); font-weight: 600; background: var(--raised); }
+ol.steps li .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+.comp { border: 1px solid var(--hairline); border-radius: 4px; padding: 10px 12px; }
+.comp .id { font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+.comp h3 { margin: 2px 0 6px; font-size: 14px; font-weight: 600; }
+.comp p { margin: 0 0 8px; font-size: 13px; }
+.comp .empty { color: var(--muted); font-size: 13px; margin: 0; }
+.legend { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px; font-size: 12px; }
+.legend span { display: flex; align-items: center; gap: 7px; }
+.legend i { width: 14px; height: 10px; border: 2px solid; border-radius: 2px; flex: none; }
+.legend i.line { height: 0; border-width: 2px 0 0; border-radius: 0; }
+.foot { font-size: 11.5px; color: var(--muted); margin: 0; }
+@media (max-width: 860px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: 54% 46%; }
+  .rail { border-left: 0; border-top: 1px solid var(--hairline); }
+  .lbl.idle { display: none; }
+  .floor.lane { display: none; }
+  .hud span { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="stage" id="stage">
+    <canvas id="c" aria-label="3D model of an AI request travelling through Kong Gateway"></canvas>
+    <div class="labels" id="labels"></div>
+    <div class="hud"><h1>Kong as an AI gateway</h1><span>Front: clients. Centre: Kong, phases left to right. Back: guardrail vendors and model providers. Front right: observability.</span></div>
+    <div class="hint">Drag to orbit · scroll or pinch to zoom · click a box for details</div>
+  </div>
+  <aside class="rail">
+    <section>
+      <h2>Scenario</h2>
+      <div class="seg" id="scen"></div>
+    </section>
+    <section>
+      <div class="transport">
+        <button id="prev" aria-label="Previous step">◀</button>
+        <button id="play" aria-pressed="false">Play</button>
+        <button id="next" aria-label="Next step">▶</button>
+        <button id="reset">Reset view</button>
+        <span class="count" id="count"></span>
+      </div>
+    </section>
+    <section class="now" id="now" aria-live="polite"></section>
+    <section>
+      <h2>Steps</h2>
+      <ol class="steps" id="steps"></ol>
+    </section>
+    <section>
+      <h2>Component</h2>
+      <div class="comp" id="comp"><p class="empty">Click any box in the model to see what it does, the phase it runs in and where its code lives.</p></div>
+    </section>
+    <section>
+      <h2>Legend</h2>
+      <div class="legend">
+        <span><i style="border-color:var(--client)"></i>Client, untrusted</span>
+        <span><i style="border-color:var(--kong)"></i>Kong process</span>
+        <span><i style="border-color:var(--vendor)"></i>Guardrail vendor</span>
+        <span><i style="border-color:var(--model)"></i>Model provider</span>
+        <span><i style="border-color:var(--obs)"></i>Observability</span>
+        <span><i style="border-color:var(--tel)"></i>Proposed plugin</span>
+        <span><i class="line" style="border-color:var(--allow)"></i>Allowed path</span>
+        <span><i class="line" style="border-color:var(--block)"></i>Blocked</span>
+        <span><i class="line" style="border-color:var(--fail)"></i>Failure, retry</span>
+        <span><i class="line" style="border-color:var(--vendor)"></i>Sync call-out</span>
+        <span><i class="line" style="border-color:var(--stream)"></i>Model traffic</span>
+        <span><i class="line" style="border-color:var(--async)"></i>Async export</span>
+      </div>
+    </section>
+    <p class="foot">EE marks Kong Enterprise plugins that are not in the open-source repository. Plugin priorities and paths refer to github.com/Kong/kong, master, October 2026. Numbers in brackets are plugin priorities: higher runs first within a phase.</p>
+  </aside>
+</div>
+
+<script>
+(function () {
+"use strict";
+var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- components ---------- */
+var NODES = {};
+function add(id, label, tb, x, y, z, role, phase, code, tag) { NODES[id] = { id: id, label: label, tb: tb, x: x, y: y, z: z, role: role, phase: phase, code: code, tag: tag }; }
+
+var LX = [-18, -12, -6, 0, 6, 12, 18], ROW = 2.5, KY = 0.3;
+function lane(i, items) {            // snake: even lanes run front→back, odd lanes back→front
+  var n = items.length, dir = (i % 2 === 0) ? -1 : 1;
+  items.forEach(function (it, k) {
+    var z = dir * (k - (n - 1) / 2) * ROW;
+    add(it[0], it[1], it[6] || "kong", LX[i], KY, z, it[2], it[3], it[4], it[5]);
+  });
+}
+lane(0, [
+  ["KONG-01", "TLS + router", "Selects the certificate, matches the route, resolves the service.", "ssl_certificate → rewrite → access", "kong/runloop/handler.lua · kong/router/"],
+  ["PLUGIN-02", "Request ID", "correlation-id (100001) and $kong_request_id: one id that every log, span and event carries.", "rewrite / access", "kong/observability/tracing/request_id.lua"],
+  ["PLUGIN-01", "Auth", "jwt (1450), oauth2 (1400), key-auth (1250), acl (950). Sets the consumer; rejects with 401 or 403.", "access", "kong/plugins/{jwt,oauth2,key-auth,acl}/"]
+]);
+lane(1, [
+  ["PLUGIN-03", "Size limit + parse", "request-size-limiting (951) caps the body. parse-request reads it once and shares the parsed table with every AI filter.", "access · REQ_INTROSPECTION", "kong/llm/plugin/shared-filters/parse-request.lua"],
+  ["PLUGIN-09", "Rate limit, budget", "rate-limiting (910) counts requests per consumer and answers 429. Token and cost budgets need ai-rate-limiting-advanced (EE).", "access", "kong/plugins/rate-limiting/handler.lua"]
+]);
+lane(2, [
+  ["PLUGIN-04", "Template + transform", "ai-request-transformer (777) rewrites the prompt with a judge model. ai-prompt-template (773) expands and validates templates.", "access · REQ_TRANSFORMATION", "kong/plugins/ai-request-transformer/ · ai-prompt-template/"],
+  ["PLUGIN-05", "Prompt decorator", "ai-prompt-decorator (772) prepends or appends messages, such as a policy system prompt.", "access · REQ_TRANSFORMATION", "kong/plugins/ai-prompt-decorator/"],
+  ["PLUGIN-06", "Prompt guard", "ai-prompt-guard (771): deny then allow regex patterns over user messages. A deny answers 400.", "access · REQ_TRANSFORMATION", "kong/plugins/ai-prompt-guard/filters/guard-prompt.lua"]
+]);
+lane(3, [
+  ["PLUGIN-07", "Vendor guardrails", "Content moderation and prompt-injection checks by calling a vendor API. Fail-open or fail-closed is set per plugin.", "access, sync HTTP", "Enterprise: ai-azure-content-safety, ai-aws-guardrails, Lakera, NeMo", "ee"],
+  ["PLUGIN-08", "PII sanitizer", "ai-sanitizer redacts sensitive data through a sidecar and can restore it on the response.", "access + body_filter", "Enterprise: ai-sanitizer", "ee"]
+]);
+lane(4, [
+  ["PLUGIN-11", "ai-proxy", "ai-proxy (770) converts the body to the provider format, adds provider auth and picks the model.", "access · REQ_TRANSFORMATION", "kong/plugins/ai-proxy/ · shared-filters/normalize-request.lua"],
+  ["PLUGIN-10", "Cache", "proxy-cache (100) exact-match lookup; a hit is served by Kong. Semantic cache is ai-semantic-cache (EE).", "access, then response", "kong/plugins/proxy-cache/handler.lua"],
+  ["KONG-07", "Drivers + balancer", "One driver per provider sets path, scheme and target. The balancer connects and retries.", "access → balancer", "kong/llm/drivers/*.lua · kong/runloop/balancer/"],
+  ["PLUGIN-12", "Fallback LB", "ai-proxy-advanced balances across models and fails over to another provider.", "balancer", "Enterprise: ai-proxy-advanced", "ee"]
+]);
+lane(5, [
+  ["KONG-08", "Header + body filter", "The AI stage machine handles the response: buffers a JSON body, or passes a stream chunk by chunk.", "header_filter · body_filter", "kong/llm/plugin/base.lua"],
+  ["PLUGIN-14", "Normalize JSON / SSE", "Converts the provider response back to OpenAI format, per body or per SSE frame.", "body_filter · STREAMING", "kong/llm/plugin/shared-filters/*-sse-chunk.lua"],
+  ["PLUGIN-13", "Response guard", "ai-response-transformer (768) checks or rewrites the output with a judge model. Semantic response guard is EE.", "response side", "kong/plugins/ai-response-transformer/"],
+  ["PLUGIN-15", "Tokens + cost", "Counts prompt and completion tokens and multiplies by the configured input and output cost.", "end of body_filter", "kong/llm/drivers/shared.lua · plugin/observability.lua"]
+]);
+lane(6, [
+  ["KONG-10", "Log serializer", "kong.log.serialize() plus ai.proxy.meta and ai.proxy.usage: the record every log plugin reads.", "log", "kong/pdk/log.lua · shared-filters/serialize-analytics.lua"],
+  ["TEL-01", "internal-ai-telemetry", "Proposed plugin (15): one redacted, sampled AI event per request. Adds time to first token, tries and guardrail verdicts. Never blocks a request.", "access · header_filter · body_filter · log", "kong/plugins/internal-ai-telemetry/ (to build)", "new", "tel"],
+  ["PLUGIN-16", "OTel, Prometheus, http-log", "opentelemetry (14), prometheus (13), http-log (12): traces, ai_llm_* metrics, JSON logs.", "log", "kong/plugins/{opentelemetry,prometheus,http-log}/"],
+  ["KONG-09", "Batch queue", "Batches, retries with backoff and drops the oldest entries when full. Runs on timers, off the request.", "ngx.timer", "kong/tools/queue.lua"]
+]);
+var BY = 4, BZ = -15;
+add("EXT-01", "Azure Content Safety", "vendor", -18.5, BY, BZ, "Moderation categories with severity.", "outside Kong", "HTTP API called by an EE plugin");
+add("EXT-02", "Bedrock Guardrails", "vendor", -13.5, BY, BZ, "ApplyGuardrail: intervene or pass.", "outside Kong", "HTTP API called by an EE plugin");
+add("EXT-03", "Lakera, NeMo", "vendor", -8.5, BY, BZ, "Prompt-injection and jailbreak classifiers, policy rails.", "outside Kong", "HTTP APIs, one EE plugin each");
+add("EXT-05", "PII sidecar", "vendor", -3.5, BY, BZ, "Anonymizer service next to Kong that finds and masks sensitive data.", "sidecar", "target of ai-sanitizer (EE)");
+add("MODEL-01", "OpenAI, Azure", "model", 3.5, BY, BZ, "Chat, completions, embeddings, streaming.", "upstream", "kong/llm/drivers/openai.lua · azure.lua");
+add("MODEL-02", "Anthropic", "model", 8.5, BY, BZ, "Chat with SSE streaming.", "upstream", "kong/llm/drivers/anthropic.lua");
+add("MODEL-03", "Bedrock, Gemini", "model", 13.5, BY, BZ, "Cloud-signed auth: SigV4 or a GCP service account.", "upstream", "kong/llm/drivers/bedrock.lua · gemini.lua");
+add("MODEL-04", "Self-hosted", "model", 18.5, BY, BZ, "Mistral, Llama, Hugging Face, any OpenAI-compatible server.", "upstream", "kong/llm/drivers/{mistral,llama2,huggingface}.lua");
+add("MODEL-05", "Judge model", "model", 11, BY, BZ - 3, "A separate model that transformers and guards ask for a verdict or a rewrite.", "upstream", "same drivers, own route and budget");
+var FZ = 15;
+add("CLI-01", "App, agent, SDK", "client", -16, 0.3, FZ, "Sends OpenAI-style requests and receives the answer or the block.", "outside Kong", "not in Kong/kong");
+add("CLI-02", "Edge LB, WAF", "client", -10, 0.3, FZ, "DNS, L4 load balancer and web firewall in front of Kong.", "outside Kong", "not in Kong/kong");
+add("OBS-01", "OTLP collector", "obs", 3, 0.3, FZ, "Receives traces and logs over OTLP.", "backend", "kong/plugins/opentelemetry/");
+add("OBS-02", "Prometheus", "obs", 8, 0.3, FZ, "Scrapes /metrics: requests, tokens, cost, provider latency.", "backend", "kong/plugins/prometheus/exporter.lua");
+add("OBS-03", "Log sink, SIEM", "obs", 13, 0.3, FZ, "Receives JSON log batches.", "backend", "kong/plugins/http-log/handler.lua");
+add("TEL-05", "AI analytics", "tel", 18, 0.3, FZ, "Internal store for the proposed AI events: usage, cost and policy by team and model.", "backend", "exporter of internal-ai-telemetry (to build)", "new");
+
+add("CUSTOM", "Your plugin", "tel", -3, 2.6, 11.2, "A custom plugin is a folder with handler.lua (one function per phase, plus a PRIORITY number) and schema.lua (its config). Kong calls each function at that phase, in priority order.", "any of: access, header_filter, body_filter, log", "kong/plugins/<name>/handler.lua · schema.lua", "new");
+
+var LANES = ["1 ingress, identity", "2 limits, parse", "3 prompt", "4 guardrails", "5 routing", "6 response", "7 log"];
+var PLATFORMS = [
+  { name: "Clients", cls: "client", x0: -20, x1: -6, z0: 13, z1: 17, y: 0 },
+  { name: "Kong Gateway", cls: "kong", x0: -21.5, x1: 21.5, z0: -5.6, z1: 6.6, y: 0 },
+  { name: "Guardrail vendors", cls: "vendor", x0: -21.5, x1: -0.7, z0: -17, z1: -13, y: BY - 0.3 },
+  { name: "Model providers", cls: "model", x0: 0.7, x1: 21.5, z0: -20, z1: -13, y: BY - 0.3 },
+  { name: "Observability", cls: "obs", x0: 0, x1: 21.5, z0: 13, z1: 17, y: 0 }
+];
+
+/* ---------- steps and scenarios ---------- */
+function S(title, kind, path, phase, text, code, extra) {
+  var s = { title: title, kind: kind, path: path, phase: phase, text: text, code: code };
+  if (extra) for (var k in extra) s[k] = extra[k];
+  return s;
+}
+var s1 = S("Client sends the AI request", "allow", ["CLI-01", "CLI-02"], "outside Kong", "An app, agent or SDK posts an OpenAI-style chat body. DNS, the load balancer and any web firewall sit in front of Kong.", "not in Kong/kong");
+var s2 = S("TLS, connection, route match", "allow", ["CLI-02", "KONG-01"], "ssl_certificate → rewrite → access", "Kong picks the certificate, then the router matches host and path to a route and a service.", "kong/runloop/handler.lua · kong/router/");
+var s3 = S("Who is asking", "allow", ["KONG-01", "PLUGIN-02", "PLUGIN-01"], "access", "The request gets one id that follows it everywhere. Auth plugins identify the caller. A bad credential ends here with 401 or 403.", "kong/plugins/{jwt,key-auth,acl}/");
+var s4 = S("Limits and parsing", "allow", ["PLUGIN-01", "PLUGIN-03", "PLUGIN-09"], "access · REQ_INTROSPECTION", "The body size is capped, the request counts against the caller's quota, and the body is parsed once for every AI filter that follows.", "shared-filters/parse-request.lua · plugins/rate-limiting/");
+var s5 = S("Shape the prompt", "allow", ["PLUGIN-09", "PLUGIN-04", "MODEL-05", "PLUGIN-04", "PLUGIN-05"], "access · REQ_TRANSFORMATION", "Templates are expanded and policy messages added. Optionally a judge model rewrites or classifies the prompt first: a synchronous call with its own timeout.", "kong/plugins/ai-request-transformer/ · ai-prompt-decorator/");
+var s6 = S("Prompt guard", "allow", ["PLUGIN-05", "PLUGIN-06"], "access · REQ_TRANSFORMATION", "User messages are checked against deny patterns, then allow patterns. This one passes.", "kong/plugins/ai-prompt-guard/filters/guard-prompt.lua", { mark: { id: "PLUGIN-06", text: "pass", cls: "allow" } });
+var s7 = S("Vendor guardrails and PII", "vendor", ["PLUGIN-06", "PLUGIN-07", "EXT-01", "PLUGIN-07", "PLUGIN-08", "EXT-05", "PLUGIN-08"], "access, synchronous HTTP", "Enterprise plugins call out and wait: moderation and injection checks at a vendor, then the sidecar masks sensitive data. None of these ship in the open-source repo.", "Enterprise plugins, not in Kong/kong", { fan: [["PLUGIN-07", "EXT-02"], ["PLUGIN-07", "EXT-03"]] });
+var s8 = S("Route to the model", "allow", ["PLUGIN-08", "PLUGIN-11", "PLUGIN-10", "KONG-07"], "access → balancer", "ai-proxy rewrites the body for the chosen provider and adds its credentials. The cache misses. The driver sets the target.", "kong/plugins/ai-proxy/ · kong/llm/drivers/", { mark: { id: "PLUGIN-10", text: "miss", cls: "allow" } });
+var s9 = S("Model generates", "stream", ["KONG-07", "MODEL-01"], "upstream", "HTTPS to the provider with the provider's own format and auth.", "kong/llm/drivers/openai.lua");
+var s10 = S("Response comes back through Kong", "stream", ["MODEL-01", "KONG-08", "PLUGIN-14"], "header_filter · body_filter", "The body is buffered, parsed and converted back to OpenAI format, whatever provider answered.", "kong/llm/plugin/base.lua · shared-filters/normalize-json-response.lua");
+var s11 = S("Response guard", "allow", ["PLUGIN-14", "PLUGIN-13"], "response side", "The output can be checked or rewritten before the client sees it.", "kong/plugins/ai-response-transformer/", { mark: { id: "PLUGIN-13", text: "pass", cls: "allow" } });
+var s12 = S("Count tokens and cost", "allow", ["PLUGIN-13", "PLUGIN-15"], "end of body_filter", "Prompt and completion tokens are counted and priced from the configured cost per million tokens.", "kong/llm/drivers/shared.lua");
+var s13 = S("Answer reaches the client", "allow", ["PLUGIN-15", "CLI-01"], "before the log phase", "The client has its bytes before any logging starts, so a slow log backend can never delay an answer.", "kong/init.lua");
+function sLog(text) {
+  return S("Log, then export in the background", "async", ["KONG-10", "TEL-01", "PLUGIN-16", "KONG-09", "TEL-05"], "log → ngx.timer", text || "Log plugins read one serialized record. The proposed telemetry plugin builds its AI event, redacts and samples it. Batches leave on timers; Prometheus scrapes its metrics.", "kong/pdk/log.lua · kong/tools/queue.lua", { fan: [["KONG-09", "OBS-01"], ["KONG-09", "OBS-03"], ["PLUGIN-16", "OBS-02"]] });
+}
+var SCEN = [
+  { id: "allowed", name: "Allowed", kind: "allow", steps: [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, sLog()] },
+  { id: "blocked", name: "Blocked", kind: "block", steps: [s1, s2, s3, s4, s5,
+      S("Prompt guard denies", "block", ["PLUGIN-05", "PLUGIN-06"], "access · REQ_TRANSFORMATION", "A user message matches a deny pattern. The plugin exits the request on the spot.", "kong/plugins/ai-prompt-guard/filters/guard-prompt.lua", { mark: { id: "PLUGIN-06", text: "deny", cls: "block" } }),
+      S("400 goes straight to the client", "block", ["PLUGIN-06", "CLI-01"], "kong.response.exit(400)", "Every later plugin is skipped and the model is never called. The reason is not revealed to the caller. Auth (401, 403), size (413) and rate limits (429) block the same way.", "kong/pdk/response.lua"),
+      sLog("The log phase still runs for a blocked request, so the block is recorded with its status and the plugin that decided it.")] },
+  { id: "guardrail-failure", name: "Guardrail failure", kind: "fail", steps: [s1, s2, s3, s4, s5, s6,
+      S("Vendor call times out", "fail", ["PLUGIN-06", "PLUGIN-07", "EXT-01"], "access, synchronous HTTP", "The guardrail service does not answer in time. Kong now has no verdict.", "Enterprise plugin, not in Kong/kong", { mark: { id: "EXT-01", text: "timeout", cls: "fail" } }),
+      S("Fail closed: 500 to the client", "block", ["EXT-01", "PLUGIN-07", "CLI-01"], "run_stage → exit(500)", "The open-source AI stage machine always fails closed: a filter error becomes a 500. Enterprise vendor plugins can be set to fail open, which lets the request continue unchecked and only logs the error.", "kong/llm/plugin/base.lua"),
+      sLog("The failure is logged with the request id. The proposed telemetry plugin is the opposite case: it always fails open and can never cause this branch.")] },
+  { id: "retry-fallback", name: "Retry + fallback", kind: "fail", steps: [s1, s2, s3, s4, s5, s6, s7, s8,
+      S("Provider answers 502", "fail", ["KONG-07", "MODEL-01", "KONG-07"], "balancer", "The first try fails upstream.", "kong/runloop/balancer/", { mark: { id: "MODEL-01", text: "502", cls: "fail" } }),
+      S("Retry times out", "fail", ["KONG-07", "MODEL-01", "KONG-07"], "balancer retry", "Kong retries up to the service's retry count. Before each try the AI plugin rebuilds the provider body and auth.", "kong/runloop/upstream_retry.lua", { mark: { id: "MODEL-01", text: "502, timeout", cls: "fail" } }),
+      S("Fall back to another provider", "fail", ["KONG-07", "PLUGIN-12", "MODEL-02"], "balancer", "ai-proxy-advanced (Enterprise) moves to the next target on the failures you list. In open source the nearest thing is several targets of the same provider format.", "Enterprise: ai-proxy-advanced", { mark: { id: "PLUGIN-12", text: "failover", cls: "fail" } }),
+      S("Response comes back through Kong", "stream", ["MODEL-02", "KONG-08", "PLUGIN-14"], "header_filter · body_filter", "Anthropic's reply is converted to the same OpenAI format, so the client cannot tell which provider answered except by the model name.", "kong/llm/drivers/anthropic.lua"),
+      s11, s12, s13,
+      sLog("The record shows three tries, their targets and that the model used differs from the model requested.")] },
+  { id: "streaming", name: "Streaming", kind: "stream", steps: [s1, s2, s3, s4, s5, s6, s7, s8, s9,
+      S("Tokens stream to the client", "stream", ["MODEL-01", "KONG-08", "PLUGIN-14", "CLI-01"], "body_filter · STREAMING, once per chunk", "Each SSE frame is converted and forwarded as it arrives; nothing is buffered. Guards that need the whole answer cannot run on a stream.", "shared-filters/parse-sse-chunk.lua · normalize-sse-chunk.lua", { stream: true }),
+      S("Count tokens at end of stream", "allow", ["PLUGIN-14", "PLUGIN-15"], "end of body_filter", "Token totals come from the provider's usage frame, or from counting chunks when the provider sends none.", "shared-filters/normalize-sse-chunk.lua"),
+      sLog("For a stream the proposed plugin also records time to first token and chunk count, which Kong does not log today.")] },
+  { id: "add-a-plugin", name: "Add a plugin", kind: "tel", steps: [
+      S("A plugin is a folder Kong loads", "tel", ["CUSTOM", "KONG-01"], "startup", "Two files: handler.lua holds one function per phase and a PRIORITY number; schema.lua declares the config. List the name under plugins in kong.conf, then attach it globally or to a service, route or consumer. It only runs for requests that match that scope.", "kong/plugins/<name>/handler.lua · schema.lua"),
+      S("Priority decides the slot", "tel", ["CUSTOM", "PLUGIN-09", "PLUGIN-04"], "inside each phase", "Within a phase Kong runs plugins from highest priority to lowest. Pick 800 and you run after rate limiting (910) and before every AI plugin (777 to 770). Pick 765 and you run after ai-proxy has already chosen the model.", "PRIORITY in handler.lua · kong/runloop/plugins_iterator.lua"),
+      S("Hook 1: access, before the model", "tel", ["CUSTOM", "PLUGIN-06", "PLUGIN-07"], "access", "The place for a guardrail. You can read the caller and the prompt, call an outside service and wait, change the request, or stop it with kong.response.exit. Everything here adds latency to the request.", "function Plugin:access(conf)"),
+      S("Or join the AI pipeline as a filter", "tel", ["CUSTOM", "PLUGIN-03", "PLUGIN-11"], "access · AI stages", "Register a filter with the AI stage machine and you get the body already parsed, the model already resolved and the shared AI context. A filter that errors fails the request with 500.", "kong/llm/plugin/base.lua"),
+      S("Hook 2: header and body filter, on the way back", "tel", ["CUSTOM", "KONG-08", "PLUGIN-13"], "header_filter · body_filter", "The place to inspect or rewrite the answer. For a stream, body_filter runs once per chunk, so keep it constant-time and never wait on the network here.", "function Plugin:header_filter(conf) · :body_filter(conf)"),
+      S("Hook 3: log, after the client is answered", "tel", ["CUSTOM", "KONG-10", "TEL-01"], "log", "The place for telemetry. The client already has its bytes, so nothing here slows the request. Read the full record with kong.log.serialize(). internal-ai-telemetry sits here at priority 15, first among the log plugins.", "function Plugin:log(conf)"),
+      S("Send work to the background", "async", ["TEL-01", "KONG-09", "TEL-05"], "ngx.timer", "Hand events to Kong's batch queue rather than calling a backend yourself. It batches, retries with backoff and drops the oldest entries when full.", "kong/tools/queue.lua", { fan: [["KONG-09", "OBS-03"]] }),
+      S("Three shapes a plugin takes", "tel", ["CUSTOM", "PLUGIN-07", "CUSTOM", "PLUGIN-13", "CUSTOM", "TEL-01"], "design choice", "Guardrail: access hook, synchronous, can block, so decide fail-open or fail-closed. Transformer: access or body filter, changes the payload. Telemetry: log hook, asynchronous, must never fail a request.", "one plugin can use several hooks")] }
+];
+
+/* ---------- built-in 3D renderer (Canvas 2D, no library, no WebGL) ---------- */
+var stage = document.getElementById("stage"), canvas = document.getElementById("c"), labelsEl = document.getElementById("labels");
+var ctx = canvas.getContext("2d");
+var col = {};
+function readTheme() {
+  var cs = getComputedStyle(document.documentElement);
+  ["ground", "surface", "raised", "ink", "muted", "hairline", "client", "kong", "vendor", "model", "obs", "tel", "allow", "block", "fail", "stream", "async"].forEach(function (k) { col[k] = cs.getPropertyValue("--" + k).trim() || "#888"; });
+}
+readTheme();
+
+var NW = 4.4, NH = 0.7, ND = 1.7;
+var view = { theta: -0.26, phi: 0.8, dist: 80, tx: 0, ty: 1, tz: 0 };
+var home = { theta: -0.26, phi: 0.8 };
+var W = 1, H = 1, cam = {};
+function top(id) { var n = NODES[id]; return [n.x, n.y + NH + 0.28, n.z]; }
+function setCam() {
+  var sp = Math.sin(view.phi), cp = Math.cos(view.phi);
+  cam.x = view.tx + view.dist * sp * Math.sin(view.theta); cam.y = view.ty + view.dist * cp; cam.z = view.tz + view.dist * sp * Math.cos(view.theta);
+  var fx = view.tx - cam.x, fy = view.ty - cam.y, fz = view.tz - cam.z, fl = Math.sqrt(fx * fx + fy * fy + fz * fz); fx /= fl; fy /= fl; fz /= fl;
+  var rx = -fz, rz = fx, rl = Math.sqrt(rx * rx + rz * rz) || 1; rx /= rl; rz /= rl;
+  cam.f = [fx, fy, fz]; cam.r = [rx, 0, rz]; cam.u = [-rz * fy, rz * fx - rx * fz, rx * fy];
+  cam.k = (H / 2) / Math.tan(15 * Math.PI / 180);
+}
+function proj(x, y, z) {
+  var dx = x - cam.x, dy = y - cam.y, dz = z - cam.z;
+  var zz = dx * cam.f[0] + dy * cam.f[1] + dz * cam.f[2]; if (zz < 0.5) return null;
+  var xx = dx * cam.r[0] + dz * cam.r[2], yy = dx * cam.u[0] + dy * cam.u[1] + dz * cam.u[2];
+  return [W / 2 + xx * cam.k / zz, H / 2 - yy * cam.k / zz, zz];
+}
+function poly(pts) { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.closePath(); }
+/* draws the faces of an axis-aligned box that face the camera; returns their screen polygons */
+function drawBox(b, fill, alpha, edge, lw) {
+  var c = [], xs = [b.x0, b.x1], ys = [b.y0, b.y1], zs = [b.z0, b.z1];
+  for (var i = 0; i < 8; i++) { var p = proj(xs[i & 1], ys[(i >> 1) & 1], zs[(i >> 2) & 1]); if (!p) return []; c.push(p); }
+  var faces = [];
+  if (cam.x > b.x1) faces.push([[c[1], c[3], c[7], c[5]], 0.10]); else if (cam.x < b.x0) faces.push([[c[0], c[2], c[6], c[4]], 0.10]);
+  if (cam.z > b.z1) faces.push([[c[4], c[5], c[7], c[6]], 0.05]); else if (cam.z < b.z0) faces.push([[c[0], c[1], c[3], c[2]], 0.05]);
+  if (cam.y > b.y1) faces.push([[c[2], c[3], c[7], c[6]], 0]);
+  ctx.lineJoin = "round";
+  faces.forEach(function (f) {
+    poly(f[0]); ctx.globalAlpha = alpha; ctx.fillStyle = fill; ctx.fill();
+    if (f[1]) { ctx.globalAlpha = f[1] * alpha; ctx.fillStyle = col.ink; ctx.fill(); }
+    ctx.globalAlpha = Math.min(1, alpha + 0.35); ctx.strokeStyle = edge; ctx.lineWidth = lw; ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+  return faces.map(function (f) { return f[0]; });
+}
+function line3(a, b) { var p = proj(a[0], a[1], a[2]), q = proj(b[0], b[1], b[2]); if (!p || !q) return; ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); }
+
+/* labels */
+var lblEl = {}, floorEls = [];
+Object.keys(NODES).forEach(function (id) {
+  var n = NODES[id], el = document.createElement("div");
+  el.className = "lbl idle";
+  el.innerHTML = "<span class=\"nm\"></span>" + (n.tag ? "<span class=\"tag " + n.tag + "\">" + (n.tag === "ee" ? "EE" : "NEW") + "</span>" : "") + "<span class=\"note\"></span>";
+  el.querySelector(".nm").textContent = n.label;
+  labelsEl.appendChild(el); lblEl[id] = el;
+});
+function floor(text, cls, x, y, z) {
+  var el = document.createElement("div"); el.className = "floor " + cls; el.textContent = text; labelsEl.appendChild(el);
+  floorEls.push({ el: el, x: x, y: y, z: z });
+}
+PLATFORMS.forEach(function (p) { floor(p.name, "c-" + p.cls, p.x0 + 0.4, p.y + 0.3, p.z1 + 0.5); });
+LANES.forEach(function (t, i) { floor(t, "lane", LX[i] - 2.6, 0.32, 6.0); });
+var pkEl = document.createElement("div"); pkEl.className = "pk"; labelsEl.appendChild(pkEl);
+
+/* ---------- flow geometry ---------- */
+var stepGeo = [];
+function arcPts(a, b) {
+  var dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  var m = [(a[0] + b[0]) / 2, Math.max(a[1], b[1]) + (d < 3.2 ? 0.45 : 0.6 + d * 0.17), (a[2] + b[2]) / 2], out = [];
+  for (var i = 0; i <= 26; i++) { var t = i / 26, u = 1 - t; out.push([u * u * a[0] + 2 * u * t * m[0] + t * t * b[0], u * u * a[1] + 2 * u * t * m[1] + t * t * b[1], u * u * a[2] + 2 * u * t * m[2] + t * t * b[2]]); }
+  return out;
+}
+function buildFlow(sc) {
+  stepGeo = sc.steps.map(function (s) {
+    var pts = [], cum = [0], fans = [];
+    for (var i = 0; i < s.path.length - 1; i++) { var a = arcPts(top(s.path[i]), top(s.path[i + 1])); if (pts.length) a.shift(); pts = pts.concat(a); }
+    for (var j = 1; j < pts.length; j++) { var p = pts[j - 1], q = pts[j]; cum.push(cum[j - 1] + Math.sqrt(Math.pow(q[0] - p[0], 2) + Math.pow(q[1] - p[1], 2) + Math.pow(q[2] - p[2], 2))); }
+    (s.fan || []).forEach(function (f) { fans.push(arcPts(top(f[0]), top(f[1]))); });
+    return { pts: pts, cum: cum, len: cum[cum.length - 1], fans: fans };
+  });
+}
+function pointAt(g, u) {
+  var L = Math.max(0, Math.min(1, u)) * g.len, i = 1; while (i < g.cum.length - 1 && g.cum[i] < L) i++;
+  var a = g.pts[i - 1], b = g.pts[i], seg = g.cum[i] - g.cum[i - 1] || 1, t = (L - g.cum[i - 1]) / seg;
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+function strokePts(pts) {
+  var started = false; ctx.beginPath();
+  for (var i = 0; i < pts.length; i++) { var p = proj(pts[i][0], pts[i][1], pts[i][2]); if (!p) { started = false; continue; } if (started) ctx.lineTo(p[0], p[1]); else { ctx.moveTo(p[0], p[1]); started = true; } }
+  ctx.stroke();
+}
+
+/* ---------- state ---------- */
+var st = { sc: 0, i: 0, t: 0, dwell: 0, playing: false, sel: null };
+var nodeState = {};
+var $ = function (id) { return document.getElementById(id); };
+
+function refreshNodes() {
+  var sc = SCEN[st.sc], cur = sc.steps[st.i], seen = {}, marks = {};
+  for (var j = 0; j <= st.i; j++) {
+    sc.steps[j].path.forEach(function (id) { seen[id] = true; });
+    (sc.steps[j].fan || []).forEach(function (f) { seen[f[1]] = true; });
+    if (sc.steps[j].mark) marks[sc.steps[j].mark.id] = sc.steps[j].mark;
+  }
+  var on = {}; cur.path.forEach(function (id) { on[id] = true; });
+  Object.keys(NODES).forEach(function (id) {
+    var el = lblEl[id], state = on[id] ? "on" : seen[id] ? "seen" : "idle";
+    nodeState[id] = state; el.className = "lbl " + state;
+    var note = el.querySelector(".note"), mk = marks[id];
+    note.textContent = mk ? mk.text : ""; note.className = "note " + (mk ? mk.cls : "");
+  });
+}
+
+function renderRail() {
+  var sc = SCEN[st.sc], cur = sc.steps[st.i];
+  $("count").textContent = (st.i + 1) + " / " + sc.steps.length;
+  var now = $("now"); now.style.borderLeftColor = "var(--" + cur.kind + ")";
+  now.innerHTML = "<div class=\"k\"></div><h3></h3><p></p><dl><dt>Phase</dt><dd></dd><dt>Code</dt><dd><code></code></dd></dl>";
+  now.querySelector(".k").textContent = "Step " + (st.i + 1) + " · " + sc.name;
+  now.querySelector("h3").textContent = cur.title;
+  now.querySelector("p").textContent = cur.text;
+  now.querySelectorAll("dd")[0].textContent = cur.phase;
+  now.querySelector("code").textContent = cur.code;
+  var ol = $("steps"); ol.innerHTML = "";
+  sc.steps.forEach(function (s, j) {
+    var li = document.createElement("li");
+    li.className = j === st.i ? "cur" : j < st.i ? "done" : "";
+    li.innerHTML = "<b></b><span><i class=\"dot\"></i><span class=\"t\"></span></span>";
+    li.querySelector("b").textContent = j + 1;
+    li.querySelector(".dot").style.background = "var(--" + s.kind + ")";
+    li.querySelector(".t").textContent = s.title;
+    li.addEventListener("click", function () { setPlaying(false); go(j); });
+    ol.appendChild(li);
+  });
+  var c = ol.querySelector(".cur"); if (c && c.scrollIntoView && st.playing) c.scrollIntoView({ block: "nearest" });
+  pkEl.textContent = st.i + 1; pkEl.style.background = "var(--" + cur.kind + ")";
+  Array.prototype.forEach.call($("scen").children, function (b, j) { b.setAttribute("aria-pressed", j === st.sc ? "true" : "false"); });
+  $("play").textContent = st.playing ? "Pause" : "Play"; $("play").setAttribute("aria-pressed", st.playing ? "true" : "false");
+}
+function renderComp() {
+  var box = $("comp"), n = st.sel && NODES[st.sel]; if (!n) return;
+  box.innerHTML = "<div class=\"id\"></div><h3></h3><p></p><dl><dt>Runs in</dt><dd></dd><dt>Code</dt><dd><code></code></dd></dl>";
+  box.style.borderLeft = "3px solid var(--" + n.tb + ")";
+  box.querySelector(".id").textContent = n.id + (n.tag === "ee" ? " · Enterprise, not in the open-source repo" : n.tag === "new" ? " · proposed, not built yet" : "");
+  box.querySelector(".id").style.color = "var(--" + n.tb + ")";
+  box.querySelector("h3").textContent = n.label;
+  box.querySelector("p").textContent = n.role;
+  box.querySelectorAll("dd")[0].textContent = n.phase;
+  box.querySelector("code").textContent = n.code;
+}
+function go(i) {
+  var sc = SCEN[st.sc]; st.i = Math.max(0, Math.min(sc.steps.length - 1, i)); st.t = reduce ? 1 : 0; st.dwell = 0;
+  refreshNodes(); renderRail();
+}
+function setScenario(k) { st.sc = k; buildFlow(SCEN[k]); go(0); try { history.replaceState(null, "", "#" + SCEN[k].id); } catch (e) {} }
+function setPlaying(p) { st.playing = p; renderRail(); }
+
+SCEN.forEach(function (sc, k) {
+  var b = document.createElement("button"); b.innerHTML = "<i></i>"; b.appendChild(document.createTextNode(sc.name));
+  b.querySelector("i").style.background = "var(--" + sc.kind + ")";
+  b.addEventListener("click", function () { setScenario(k); if (!reduce) setPlaying(true); });
+  $("scen").appendChild(b);
+});
+$("prev").addEventListener("click", function () { setPlaying(false); go(st.i - 1); });
+$("next").addEventListener("click", function () { setPlaying(false); go(st.i + 1); });
+$("play").addEventListener("click", function () {
+  if (!st.playing && st.i === SCEN[st.sc].steps.length - 1) go(0);
+  setPlaying(!st.playing);
+});
+$("reset").addEventListener("click", function () { view.theta = home.theta; view.phi = home.phi; fit(); });
+document.addEventListener("keydown", function (e) {
+  if (e.target && /BUTTON|INPUT/.test(e.target.tagName) && e.key === " ") return;
+  if (e.key === "ArrowRight") { setPlaying(false); go(st.i + 1); }
+  else if (e.key === "ArrowLeft") { setPlaying(false); go(st.i - 1); }
+  else if (e.key === " ") { e.preventDefault(); $("play").click(); }
+});
+
+/* ---------- camera, input ---------- */
+function fit() { view.dist = Math.max(52 / (0.536 * (W / H)), 60); }
+function resize() {
+  var r = stage.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = Math.max(1, r.width); H = Math.max(1, r.height);
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fit();
+}
+if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
+window.addEventListener("resize", resize);
+resize();
+
+var ptrs = {}, down = null, pinch = 0, hitPolys = [];
+function inPoly(x, y, pts) {
+  var c = false;
+  for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    if ((pts[i][1] > y) !== (pts[j][1] > y) && x < (pts[j][0] - pts[i][0]) * (y - pts[i][1]) / (pts[j][1] - pts[i][1]) + pts[i][0]) c = !c;
+  }
+  return c;
+}
+function pick(e) {
+  var r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  for (var i = hitPolys.length - 1; i >= 0; i--) if (inPoly(x, y, hitPolys[i].pts)) return hitPolys[i].id;
+  return null;
+}
+canvas.addEventListener("pointerdown", function (e) {
+  ptrs[e.pointerId] = { x: e.clientX, y: e.clientY }; try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  down = { moved: 0 }; canvas.classList.add("drag");
+  var ids = Object.keys(ptrs); if (ids.length === 2) pinch = Math.hypot(ptrs[ids[0]].x - ptrs[ids[1]].x, ptrs[ids[0]].y - ptrs[ids[1]].y);
+});
+canvas.addEventListener("pointermove", function (e) {
+  var p = ptrs[e.pointerId];
+  if (!p) { canvas.classList.toggle("hit", !!pick(e)); return; }
+  var ids = Object.keys(ptrs), dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+  if (ids.length === 2) {
+    var d = Math.hypot(ptrs[ids[0]].x - ptrs[ids[1]].x, ptrs[ids[0]].y - ptrs[ids[1]].y);
+    if (pinch && d) view.dist = Math.max(25, Math.min(220, view.dist * pinch / d)); pinch = d; return;
+  }
+  if (down) down.moved += Math.abs(dx) + Math.abs(dy);
+  view.theta -= dx * 0.006; view.phi = Math.max(0.2, Math.min(1.5, view.phi - dy * 0.005));
+});
+function up(e) {
+  delete ptrs[e.pointerId]; canvas.classList.remove("drag"); pinch = 0;
+  if (down && down.moved < 6) { var id = pick(e); if (id) { st.sel = id; renderComp(); } }
+  down = null;
+}
+canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
+canvas.addEventListener("wheel", function (e) { e.preventDefault(); view.dist = Math.max(25, Math.min(220, view.dist * (1 + (e.deltaY > 0 ? 1 : -1) * 0.08))); }, { passive: false });
+
+/* ---------- loop ---------- */
+var last = performance.now();
+function place(el, x, y, z, ax, ay) {
+  var p = proj(x, y, z);
+  if (!p) { el.style.visibility = "hidden"; return; }
+  el.style.visibility = "";
+  el.style.transform = "translate(" + p[0].toFixed(1) + "px," + p[1].toFixed(1) + "px) translate(" + ax + "," + ay + ")";
+}
+function dist2(x, y, z) { return (x - cam.x) * (x - cam.x) + (y - cam.y) * (y - cam.y) + (z - cam.z) * (z - cam.z); }
+function draw() {
+  var sc = SCEN[st.sc], cur = sc.steps[st.i], g = stepGeo[st.i];
+  setCam(); ctx.clearRect(0, 0, W, H);
+  // platforms, far to near
+  PLATFORMS.slice().sort(function (a, b) { return dist2((b.x0 + b.x1) / 2, b.y, (b.z0 + b.z1) / 2) - dist2((a.x0 + a.x1) / 2, a.y, (a.z0 + a.z1) / 2); })
+    .forEach(function (p) { drawBox({ x0: p.x0, x1: p.x1, y0: p.y, y1: p.y + 0.3, z0: p.z0, z1: p.z1 }, col.raised, 0.55, col[p.cls], 1.4); });
+  // lane dividers on the Kong floor
+  ctx.strokeStyle = col.kong; ctx.globalAlpha = 0.4; ctx.lineWidth = 1;
+  for (var i = 1; i < 7; i++) { var lx = (LX[i - 1] + LX[i]) / 2; line3([lx, 0.31, -5.6], [lx, 0.31, 6.6]); }
+  // stem under the floating plugin
+  var cu = NODES.CUSTOM; ctx.strokeStyle = col.tel; ctx.globalAlpha = 0.7; ctx.setLineDash([4, 4]); line3([cu.x, cu.y, cu.z], [cu.x, 0, cu.z]); ctx.setLineDash([]); ctx.globalAlpha = 1;
+  // nodes, far to near
+  hitPolys = [];
+  Object.keys(NODES).map(function (id) { return NODES[id]; })
+    .sort(function (a, b) { return dist2(b.x, b.y, b.z) - dist2(a.x, a.y, a.z); })
+    .forEach(function (n) {
+      var s = nodeState[n.id], sel = st.sel === n.id;
+      var polys = drawBox({ x0: n.x - NW / 2, x1: n.x + NW / 2, y0: n.y, y1: n.y + NH, z0: n.z - ND / 2, z1: n.z + ND / 2 },
+        s === "on" ? col[n.tb] : col.surface, s === "idle" ? 0.5 : 1, sel ? col.ink : col[n.tb], sel ? 2.4 : 1.3);
+      polys.forEach(function (pts) { hitPolys.push({ id: n.id, pts: pts }); });
+    });
+  // flows: future, done, then the active step on top
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  [0, 1, 2].forEach(function (pass) {
+    stepGeo.forEach(function (sg, j) {
+      var kind = j === st.i ? 2 : j < st.i ? 1 : 0; if (kind !== pass) return;
+      ctx.strokeStyle = col[sc.steps[j].kind]; ctx.globalAlpha = [0.14, 0.5, 1][kind]; ctx.lineWidth = [1.5, 2, 3.2][kind];
+      strokePts(sg.pts);
+      ctx.lineWidth = 1.5; sg.fans.forEach(strokePts);
+    });
+  });
+  ctx.globalAlpha = 1;
+  // packets
+  var n = cur.stream ? 6 : 1, first = null;
+  for (var k = 0; k < n; k++) {
+    var u = cur.stream ? ((st.t * 3 + k / n) % 1) : st.t, w = pointAt(g, u), p = proj(w[0], w[1], w[2]);
+    if (k === 0) first = w; if (!p) continue;
+    var r = Math.max(3.5, 0.34 * cam.k / p[2]) * (cur.stream ? 0.7 : 1);
+    ctx.fillStyle = col[cur.kind];
+    ctx.globalAlpha = 0.22; ctx.beginPath(); ctx.arc(p[0], p[1], r * 1.9, 0, 6.2832); ctx.fill();
+    ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, 6.2832); ctx.fill();
+  }
+  // labels
+  Object.keys(NODES).forEach(function (id) { var nd = NODES[id]; place(lblEl[id], nd.x, nd.y + NH + 0.5, nd.z, "-50%", "-100%"); });
+  floorEls.forEach(function (f) { place(f.el, f.x, f.y, f.z, "0", "0"); });
+  if (first) place(pkEl, first[0], first[1] + 0.9, first[2], "-50%", "-100%");
+}
+function frame(now) {
+  var dt = Math.min(0.05, (now - last) / 1000); last = now;
+  var sc = SCEN[st.sc], cur = sc.steps[st.i], g = stepGeo[st.i];
+  if (st.t < 1) st.t = Math.min(1, st.t + dt / (cur.stream ? 3.6 : 0.7 + g.len * 0.035));
+  else if (st.playing) {
+    st.dwell += dt;
+    if (st.dwell > 1.9) { if (st.i < sc.steps.length - 1) go(st.i + 1); else setPlaying(false); }
+  }
+  try { draw(); } catch (err) { stage.querySelector(".hint").textContent = "Drawing error: " + err.message; }
+  requestAnimationFrame(frame);
+}
+
+/* ---------- theme changes ---------- */
+if (window.MutationObserver) new MutationObserver(readTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+if (window.matchMedia) { var mq = matchMedia("(prefers-color-scheme: dark)"); if (mq.addEventListener) mq.addEventListener("change", readTheme); }
+
+/* ---------- start ---------- */
+var start = 0, h = (location.hash || "").replace("#", "");
+SCEN.forEach(function (s, k) { if (s.id === h) start = k; });
+st.sc = start; buildFlow(SCEN[start]); go(0);
+requestAnimationFrame(frame);
+if (!reduce) setPlaying(true);
+})();
+</script>
+</body>
+</html>

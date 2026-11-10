@@ -84,6 +84,34 @@ def _guardrails_configured(g: dict) -> dict[str, bool]:
     return {}
 
 
+def _chain_view(r: dict) -> list[dict]:
+    """The route's plugins in execution order, each with a display label and a kind.
+
+    kind: probe | guardrail (declared, or one of Kong's own) | router (ai-proxy) | candidate | plugin.
+    A candidate is a plugin nobody declared that sits inside the probed stretch of the chain (below the head
+    plugin, above the lowest middle probe): it is found by its position, shown under its own name, and gets
+    the same per-gap latency and block attribution as a declared guardrail.
+    """
+    chain = r["_chain"]
+    probes = [p for n, p in chain.items() if n.startswith("gro-probe-")]
+    head = chain.get("guardrail-observer", 790)
+    lo = min(probes) if probes else None
+    out = []
+    for n, p in sorted(chain.items(), key=lambda kv: -kv[1]):
+        if n.startswith("gro-probe-") or n in OUR_PLUGINS:
+            kind = "probe"
+        elif n in r["guardrails_configured"]:
+            kind = "guardrail"
+        elif n.startswith("ai-proxy"):
+            kind = "router"
+        elif lo is not None and lo < p < head:
+            kind = "candidate"
+        else:
+            kind = "plugin"
+        out.append({"name": n, "label": r["_labels"].get(n) or n, "priority": p, "kind": kind})
+    return out
+
+
 def _is_ai_route(g: dict) -> bool:
     return any(n and n.startswith("ai-proxy") for n in _configured_names(g)) or bool(g.get("ai_native"))
 
@@ -128,7 +156,7 @@ def summarize(observations: Iterable[dict], th: Optional[Thresholds] = None, top
         route = _route(g)
         r = routes.setdefault(route, {"requests": 0, "blocked": 0, "ai": False, "guardrails_configured": {}, "probes_expected": [],
                                       "has_trail": False, "_chain_share": [], "_duration": [], "_chain_ms": [], "fingerprints": [],
-                                      "environment": g.get("environment"), "shared_gaps": set(), "_events": [], "_chain": {}})
+                                      "environment": g.get("environment"), "shared_gaps": set(), "_events": [], "_chain": {}, "_labels": {}})
         r["requests"] += 1
         r["ai"] = r["ai"] or _is_ai_route(g)
         for p in g.get("plugin_chain") or []:
@@ -137,6 +165,10 @@ def summarize(observations: Iterable[dict], th: Optional[Thresholds] = None, top
         for x in g.get("guardrails_configured") or []:
             if x.get("name") and isinstance(x.get("priority"), (int, float)):
                 r["_chain"][x["name"]] = x["priority"]
+        # a human-given name beats the plugin type: Kong lets every plugin instance carry an instance_name
+        for p in ((g.get("configured_plugins") or {}).get("plugins") or []):
+            if isinstance(p, dict) and p.get("name") and p.get("instance_name"):
+                r["_labels"][p["name"]] = p["instance_name"]
         gc = _guardrails_configured(g)
         r["guardrails_configured"].update(gc)
         trail = g.get("trail") or {}
@@ -353,10 +385,7 @@ def summarize(observations: Iterable[dict], th: Optional[Thresholds] = None, top
             "chain_ms": _lat(r["_chain_ms"]), "duration_ms": _lat(r["_duration"]),
             "chain_share_p50": quantile(r["_chain_share"], 0.5),
             "shared_gaps": [list(x) for x in sorted(r["shared_gaps"])], "policy_fingerprints": r["fingerprints"],
-            "chain": [{"name": n, "priority": p,
-                       "kind": "probe" if n.startswith("gro-probe-") or n in OUR_PLUGINS else
-                               "guardrail" if n in r["guardrails_configured"] else "router" if n.startswith("ai-proxy") else "plugin"}
-                      for n, p in sorted(r["_chain"].items(), key=lambda kv: -kv[1])],
+            "chain": _chain_view(r),
             "environment": r["environment"],
         }
         if not r["ai"]:

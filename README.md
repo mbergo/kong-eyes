@@ -45,38 +45,88 @@ client ─► Kong route
 
 Your guardrails are not modified. The probes only read and annotate the request context.
 
-## Quick start
+## Three scripts
 
-On a fresh Linux host (Docker is installed for you):
+| You want to | Run |
+|---|---|
+| Stand up the dashboard on AWS, on HTTPS | `scripts/aws-up.sh NAME` |
+| Put the probes on a route of your Kong | `scripts/attach-to-kong.sh --route R --guardrails a:780,b:776` |
+| Send prompts at a Kong route as load | `scripts/kong-load.py URL -H 'apikey: KEY'` |
+
+### 1. `scripts/aws-up.sh NAME`: the dashboard on a t3.small
 
 ```bash
-git clone git@github.com:mbergo/kong-eyes.git && cd kong-eyes
-deploy/install.sh --mock-minutes 30
+scripts/aws-up.sh eyes-demo                     # uses your AWS CLI credentials and region
+scripts/aws-up.sh eyes-demo --domain eyes.example.com
+scripts/aws-up.sh eyes-demo --destroy           # removes the instance, security group and key pair
 ```
 
-Or from your laptop to a remote host over SSH:
+Creates a key pair, a security group (SSH from your IP only, 80/443 open) and one Ubuntu instance named
+`NAME`, ships this repo to it and runs `deploy/install.sh --https`. Caddy gets the certificate on its own
+(Let's Encrypt, ZeroSSL as fallback). Without `--domain` the address is `https://<ip-with-dashes>.sslip.io`.
+The host runs a demo Kong with synthetic guardrails and traffic so the dashboard has something to show.
+
+| Path on the host | What |
+|---|---|
+| `/` | Grafana. Dashboard "Guardrail chain - live traffic", with the 3D chain embedded and a legend for every panel |
+| `/eyes/*` | Read-only chain view and summaries, served only to a browser logged in to Grafana |
+| `/ingest/kong` | Where your own Kong posts its events (needs the ingest token) |
+| `/kong/*` | The demo Kong proxy (key-auth), a target for the load script |
+
+### 2. `scripts/attach-to-kong.sh`: the probes on your Kong
 
 ```bash
-scripts/deploy-remote.sh ubuntu@<host> -i ~/key.pem -- --mock-minutes 30
+scripts/gen-probes.sh --guardrails my-input-guard:780,my-pii-guard:776,ai-proxy:770,my-output-guard:760
+# build the image (kong/Dockerfile), add the printed names to KONG_PLUGINS, roll your data planes, then:
+KONG_ADMIN_URL=https://kong-admin:8001 EVALUATOR_INGEST_URL=https://<eyes-host>/ingest/kong \
+INGEST_TOKEN=... RUNNER_SECRET=... \
+scripts/attach-to-kong.sh --route my-ai-route \
+  --guardrails my-input-guard:780,my-pii-guard:776,ai-proxy:770,my-output-guard:760 \
+  --timeouts my-input-guard:400            # dry run; add --apply
 ```
 
-Already have Docker and just want it locally:
+It checks the gateway version and that every plugin is loaded, shows the payloads, never touches your
+guardrails or existing loggers, and is idempotent. `scripts/rollback.sh --route my-ai-route --apply` removes it.
+
+You do not have to list every plugin. The head plugin reads the route's full plugin list from Kong, so any
+plugin sitting between two probes is **found by its position and shown under its own name** (its
+`instance_name` if you gave it one), with the same latency and block attribution. `--guardrails` only tells
+the script where to put probes and which plugins to treat as guardrails in the coverage checks.
+
+### 3. `scripts/kong-load.py URL`: prompts as load
+
+```bash
+scripts/kong-load.py https://kong.example.com/ai/chat -H 'apikey: KEY' --minutes 10 --rps 3
+scripts/kong-load.py https://<eyes-host>/kong/ai/chain -H 'apikey: KEY' --demo      # against the demo Kong
+```
+
+Random prompts every run: benign ones are built from parts (task x topic x style), and well-known
+injection, PII and secret-shaped test strings are wrapped in a random benign request. Traffic moves through
+phases (normal, attack wave, quiet) unless `--steady`. `--mix`, `--stream` and `--prompts FILE` change the
+blend. It prints status codes per category and latency; the dashboard says which plugin answered.
+
+## Seeing the prompts
+
+The dashboard has a "Requests, one by one" row: status, served or stopped by which plugin, gateway time,
+and the start of the prompt. Prompts appear only when two switches are on, and both are off by default:
+
+1. the route's observer captures bodies: `capture_body_mode: bounded`
+2. the evaluator exports an excerpt: `EXPORT_PROMPT_CHARS=240`
+
+With the defaults (`hash`, `0`) no content leaves Kong. The demo install turns both on because its traffic
+is synthetic. Think before doing that on a route with real users.
+
+## Run it locally
 
 ```bash
 make up DESTINATION=grafana     # build, validate, start, smoke-test
 make run-chain                  # ordinary traffic through the probed chain, then print the signals
+scripts/mock-flow.py --minutes 30
 ```
 
-Then open:
-
-| | |
-|---|---|
-| Grafana | `http://localhost:3000` → "Guardrail chain - live traffic" |
-| Chain view | `http://localhost:8800/chain` |
-| Signals (JSON) | `http://localhost:8800/passive/signals` |
-
-`deploy/install.sh` binds every port to localhost by default; it prints the SSH tunnel command.
-Pass `--bind 0.0.0.0` only on a host you have firewalled.
+Grafana is on `http://localhost:3000`, the chain view on `http://localhost:8800/chain`. On a remote host
+you already have, `scripts/deploy-remote.sh user@host -i key.pem -- --https` does the same as `aws-up.sh`
+without creating anything in AWS.
 
 ## Using it with your own guardrails
 
@@ -129,7 +179,8 @@ Verified on a real Kong 3.10 gateway with synthetic guardrails and a mock model:
 Not verified yet:
 
 - A live Claude call (only the offline stub has run) and the Bedrock path.
-- `deploy/install.sh` and `scripts/deploy-remote.sh` on a real remote host.
+- `scripts/aws-up.sh`, `deploy/install.sh` and `scripts/deploy-remote.sh` on a real host. The pieces were checked locally
+  (Caddy routing and login gate, the generated compose file, the load script, the attach dry run), not end to end.
 - Real guardrails, production traffic volumes, and any Konnect-hosted data plane.
 - Kong versions other than 3.10. The internal adapters are version-gated and degrade to `unknown`.
 
@@ -145,8 +196,11 @@ runner/                                 test runner and suites
 observability/                          Grafana dashboards, Loki, Prometheus, Alloy, Splunk
 scripts/                                setup, probe generator, attach, rollback, deploy, mock traffic
 deploy/                                 install.sh, AWS and Konnect snippets
-docs/                                   probes, passive checks, schema, adapters, results
+docs/                                   probes, passive checks, schema, adapters, results, request-flow-3d.html
 ```
+
+[docs/request-flow-3d.html](docs/request-flow-3d.html) is a standalone 3D walk through a request crossing Kong as an AI
+gateway, component by component, including where a plugin fits. Open it in a browser.
 
 The second mode, grading a guardrail against labelled test suites, plus Splunk export, rollback and
 the full list of known limits, is documented in [docs/REFERENCE.md](docs/REFERENCE.md).

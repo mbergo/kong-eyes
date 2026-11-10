@@ -248,7 +248,8 @@ services:
               environment: local
               policy_version: "chain-v1"
               runner_shared_secret: "{vault://env/go-runner-secret}"
-              capture_body_mode: hash
+              capture_body_mode: bounded        # synthetic traffic only: lets the dashboard show the prompts
+              max_capture_bytes: 1024
               guardrail_timeouts: { fixture-input-guard: 400 }
           - name: guardrail-observer-tail
             config: { capture_body_mode: hash }

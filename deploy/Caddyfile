@@ -1,0 +1,38 @@
+# HTTPS front door for the kong-eyes host. Caddy obtains and renews the certificate on its own
+# (Let's Encrypt, falling back to ZeroSSL). EYES_DOMAIN must resolve to this host and ports 80/443
+# must be reachable from the internet for the certificate challenge.
+#
+#   /            Grafana (its own login)
+#   /eyes/*      read-only evaluator pages for the dashboard (chain view, summary, findings);
+#                only served to a browser that is already logged in to Grafana
+#   /ingest/*    where a Kong gateway posts its events (protected by the evaluator's ingest token)
+#   /kong/*      the demo Kong proxy on this host (key-auth), a target for scripts/kong-load.py
+{$EYES_DOMAIN} {
+	encode gzip
+
+	handle /ingest/* {
+		reverse_proxy evaluator:8000
+	}
+
+	handle_path /eyes/* {
+		route {
+			forward_auth grafana:3000 {
+				uri /api/user
+			}
+			@readonly {
+				method GET
+				path /chain /passive/summary /passive/findings /passive/signals
+			}
+			reverse_proxy @readonly evaluator:8000
+			respond 404
+		}
+	}
+
+	handle_path /kong/* {
+		reverse_proxy kong:8000
+	}
+
+	handle {
+		reverse_proxy grafana:3000
+	}
+}

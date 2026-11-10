@@ -12,7 +12,7 @@ cd "$(dirname "$0")/.."
 
 TARGET="${1:-}"; [[ -n "$TARGET" && "$TARGET" != -* ]] || { sed -n '2,9p' "$0"; exit 2; }
 shift
-KEY=""; RDIR="guardrail-observer"; EXTRA=()
+KEY=""; RDIR="kong-eyes"; EXTRA=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -i) KEY="$2"; shift 2;;

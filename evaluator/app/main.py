@@ -7,6 +7,7 @@ through independent durable queues.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import csv
 import io
@@ -43,6 +44,26 @@ PASSIVE_WINDOW_S = float(os.environ.get("PASSIVE_WINDOW_S", "900"))
 store = Store(DB_PATH)
 metrics.register(store)
 app = FastAPI(title="guardrail-evaluator", version=VERSION)
+
+# Content never leaves the evaluator unless you ask for it twice: the route's observer must capture bodies
+# (capture_body_mode: bounded) AND this must be > 0. Then the start of the last user message is exported
+# with each observation so a dashboard can list prompts. Meant for synthetic traffic and test environments.
+EXPORT_PROMPT_CHARS = int(os.environ.get("EXPORT_PROMPT_CHARS", "0") or 0)
+
+
+def _prompt_excerpt(body_prefix: str, limit: int) -> str | None:
+    """Last user message from a (possibly truncated) chat-completions body, cut to `limit` characters."""
+    try:
+        msgs = json.loads(body_prefix).get("messages") or []
+        users = [m.get("content") for m in msgs if isinstance(m, dict) and m.get("role") == "user" and isinstance(m.get("content"), str)]
+        text = users[-1] if users else None
+    except Exception:
+        i = body_prefix.rfind('"content":')            # body was cut mid-JSON: take what follows the last content key
+        text = body_prefix[i + 10:].lstrip(' "') if i >= 0 else None
+    if not text:
+        return None
+    text = " ".join(text.split())
+    return text[:limit] + ("…" if len(text) > limit else "")
 
 DESTINATIONS: dict[str, OutboxWorker] = {}
 
@@ -155,6 +176,8 @@ def _observation_export_view(gro: dict) -> dict:
     v["response"] = {k: resp.get(k) for k in ("status", "source", "proxied", "upstream_status", "content_type")}
     req = gro.get("request") or {}
     v["request"] = {k: req.get(k) for k in ("method", "path", "body_bytes", "body_sha256", "stream_requested", "model", "message_count", "prompt_chars", "json_valid", "body_in_file")}
+    if EXPORT_PROMPT_CHARS > 0 and req.get("body_prefix"):
+        v["request"]["prompt_excerpt"] = _prompt_excerpt(req["body_prefix"], EXPORT_PROMPT_CHARS)
     for key in ("stream", "tail"):
         s = gro.get(key) or {}
         v[key] = {k: s.get(k) for k in ("chunks", "bytes", "sha256", "first_chunk_at_ms", "eof_at_ms", "truncated", "observed_at")} if s else None
@@ -456,6 +479,25 @@ async def passive_translate(window_s: float | None = None, include_runs: bool = 
           "provider": doc["provider"], "headline": doc["headline"], "findings": doc["findings"]}
     _fanout(ev)
     return doc
+
+
+@app.on_event("startup")
+async def _auto_translate():
+    """TRANSLATE_EVERY_S > 0: refresh the plain-language findings on a timer (skipped while there is no traffic)."""
+    every = float(os.environ.get("TRANSLATE_EVERY_S", "0") or 0)
+    if every <= 0:
+        return
+
+    async def loop():
+        while True:
+            await asyncio.sleep(max(every, 30.0))
+            try:
+                if store.observations_since(time.time() * 1000 - 60_000):
+                    await passive_translate()
+            except Exception as e:  # never let the timer die
+                logging.getLogger("evaluator").warning("auto translate failed: %s", e)
+
+    asyncio.create_task(loop())
 
 
 @app.get("/passive/findings")
