@@ -1,0 +1,189 @@
+# Guardrail Observer - local demo stack
+#
+#   make up                        core: kong + mock-llm + evaluator          (+ grafana profile by default)
+#   DESTINATION=splunk make up     core + splunk HEC stub (or real Splunk via .env)
+#   DESTINATION=both make up       everything
+#
+# Profiles: grafana | splunk | splunk-stub. scripts/setup.sh writes .env and picks the profiles.
+# All images are pinned by tag + digest in .env (overridable).
+
+name: guardrail-observer
+
+services:
+  kong:
+    build:
+      context: ./kong
+      args:
+        KONG_BASE_IMAGE: ${KONG_BASE_IMAGE}
+        INSTALL_FIXTURES: "1"
+    image: guardrail-observer/kong:3.10.0.19-local
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/declarative/kong.generated.yml
+      KONG_PLUGINS: bundled,guardrail-observer,guardrail-observer-tail,gro-probe-773,gro-probe-765,gro-probe-750,fixture-input-guard,fixture-output-guard
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_STATUS_LISTEN: 0.0.0.0:8100
+      KONG_LOG_LEVEL: ${KONG_LOG_LEVEL:-notice}
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ACCESS_LOG: "off"
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_NGINX_HTTP_CLIENT_BODY_BUFFER_SIZE: 1m
+      KONG_HEADERS: server_tokens,latency_tokens,X-Kong-Request-Id
+      KONG_VAULTS: bundled
+      KONG_REQUEST_DEBUG: "on"
+      KONG_REQUEST_DEBUG_TOKEN: ${KONG_REQUEST_DEBUG_TOKEN}
+      KONG_LICENSE_DATA: ${KONG_LICENSE_DATA:-}
+      # env vault values referenced from kong.yml as {vault://env/go-...}
+      GO_INGEST_ENDPOINT: http://kong:${INGEST_TOKEN}@evaluator:8000/ingest/kong
+      GO_RUNNER_SECRET: ${RUNNER_SECRET}
+      GO_KIMI_AUTH_HEADER: "Bearer ${KIMI_API_KEY:-unset}"
+    volumes:
+      - ./kong/declarative:/kong/declarative:ro
+    ports:
+      - "${KONG_PROXY_PORT:-8000}:8000"
+      - "${KONG_ADMIN_PORT:-8001}:8001"
+      - "${KONG_STATUS_PORT:-8100}:8100"
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      evaluator: { condition: service_healthy }
+      mock-llm: { condition: service_started }
+
+  mock-llm:
+    build:
+      context: ./mock-llm
+      secrets: [build_ca]
+    image: guardrail-observer/mock-llm:local
+    environment:
+      MOCK_CHUNK_DELAY_S: "0.15"
+
+  evaluator:
+    build:
+      context: ./evaluator
+      secrets: [build_ca]
+    image: guardrail-observer/evaluator:local
+    environment:
+      INGEST_TOKEN: ${INGEST_TOKEN}
+      RUNNER_TOKEN: ${RUNNER_TOKEN}
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      JOIN_TIMEOUT_S: "120"
+      EXPORT_OBSERVATIONS: "true"
+      PASSIVE_WINDOW_S: ${PASSIVE_WINDOW_S:-900}
+      # plain-language findings: stub (offline) unless a key or a Bedrock model id is provided
+      TRANSLATE_PROVIDER: ${TRANSLATE_PROVIDER:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TRANSLATE_MODEL: ${TRANSLATE_MODEL:-claude-sonnet-5-5}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-}
+      AWS_REGION: ${AWS_REGION:-}
+      TRANSLATE_INCLUDE_CONSUMERS: ${TRANSLATE_INCLUDE_CONSUMERS:-false}
+      OTLP_LOGS_ENDPOINT: ${OTLP_LOGS_ENDPOINT:-}
+      OTLP_HEADERS: ${OTLP_HEADERS:-}
+      SPLUNK_HEC_URL: ${SPLUNK_HEC_URL:-}
+      SPLUNK_HEC_TOKEN: ${SPLUNK_HEC_TOKEN:-}
+      SPLUNK_HEC_INDEX: ${SPLUNK_HEC_INDEX:-}
+      SPLUNK_HEC_SOURCETYPE: ${SPLUNK_HEC_SOURCETYPE:-kong:guardrail:evaluation}
+      SPLUNK_HEC_VERIFY_TLS: ${SPLUNK_HEC_VERIFY_TLS:-true}
+      SPLUNK_HEC_ACK: ${SPLUNK_HEC_ACK:-false}
+    volumes:
+      - evaluator-data:/data
+    ports:
+      - "${EVALUATOR_PORT:-8800}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  runner:
+    build:
+      context: ./runner
+      secrets: [build_ca]
+    image: guardrail-observer/runner:local
+    profiles: [tools]
+    environment:
+      KONG_URL: http://kong:8000
+      EVALUATOR_URL: http://evaluator:8000
+      RUNNER_TOKEN: ${RUNNER_TOKEN}
+      RUNNER_SECRET: ${RUNNER_SECRET}
+      RUNNER_APIKEY: ${RUNNER_APIKEY}
+      KONG_REQUEST_DEBUG_TOKEN: ${KONG_REQUEST_DEBUG_TOKEN}
+    volumes:
+      - ./runner/cases:/runner/cases:ro
+
+  # ------------------------------------------------------------- grafana stack
+  alloy:
+    image: ${ALLOY_IMAGE}
+    profiles: [grafana]
+    command: ["run", "/etc/alloy/config.alloy", "--server.http.listen-addr=0.0.0.0:12345", "--stability.level=generally-available"]
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+    environment:
+      LOKI_WRITE_URL: ${LOKI_WRITE_URL:-http://loki:3100/otlp}
+      PROM_REMOTE_WRITE_URL: ${PROM_REMOTE_WRITE_URL:-http://prometheus:9090/api/v1/write}
+      LOKI_AUTH_HEADER: ${LOKI_AUTH_HEADER:-}
+      PROM_AUTH_HEADER: ${PROM_AUTH_HEADER:-}
+    ports:
+      - "${ALLOY_PORT:-12345}:12345"
+      - "${OTLP_HTTP_PORT:-4318}:4318"
+    depends_on: [loki, prometheus]
+
+  loki:
+    image: ${LOKI_IMAGE}
+    profiles: [grafana]
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    volumes:
+      - ./observability/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+
+  prometheus:
+    image: ${PROMETHEUS_IMAGE}
+    profiles: [grafana]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--web.enable-remote-write-receiver", "--storage.tsdb.retention.time=7d"]
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom-data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+
+  grafana:
+    image: ${GRAFANA_IMAGE}
+    profiles: [grafana]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on: [loki, prometheus]
+
+  # --------------------------------------------------------------- splunk stub
+  # HEC-compatible stub for local validation of the exporter. It proves the
+  # envelope/auth/response handling, NOT a live Splunk integration.
+  splunk-hec-stub:
+    build: ./observability/splunk/stub
+    image: guardrail-observer/splunk-hec-stub:local
+    profiles: [splunk-stub]
+    environment:
+      HEC_TOKEN: ${SPLUNK_HEC_TOKEN:-stub-token}
+    ports:
+      - "${SPLUNK_STUB_PORT:-8088}:8088"
+
+secrets:
+  build_ca:
+    file: ${BUILD_CA_FILE:-./.build/empty-ca.crt}
+
+volumes:
+  evaluator-data: {}
+  loki-data: {}
+  prom-data: {}

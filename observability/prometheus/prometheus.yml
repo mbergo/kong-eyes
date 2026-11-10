@@ -1,0 +1,5 @@
+# Metrics arrive via Alloy remote_write (prometheus.scrape in observability/alloy/config.alloy).
+# No direct scrape_configs here: a second collector would double-count every series.
+global:
+  scrape_interval: 15s
+scrape_configs: []

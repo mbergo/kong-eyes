@@ -1,0 +1,27 @@
+# deck snippet: attach the observer + evidence logger to ONE existing route in Konnect (or self-managed via deck).
+# Requires: schemas uploaded (scripts/konnect-upload-schema.sh), plugin files on every data plane,
+# and the plugin names in the data planes' KONG_PLUGINS. Replace <...>. Use deck's --select-tag if you tag.
+_format_version: "3.0"
+_konnect:
+  control_plane_name: <control-plane-name>
+plugins:
+  - name: guardrail-observer
+    instance_name: guardrail-observer-<route>
+    route: <route-name>
+    config:
+      environment: prod
+      policy_version: <your policy version>
+      runner_shared_secret: "{vault://<your vault>/guardrail-observer/runner-secret}"
+      capture_body_mode: hash          # metadata only in production; "bounded" needs explicit authorization
+  - name: guardrail-observer-tail
+    instance_name: guardrail-observer-tail-<route>
+    route: <route-name>
+    config: { capture_body_mode: hash }
+  - name: http-log
+    instance_name: guardrail-observer-log-<route>
+    route: <route-name>
+    config:
+      # basic-auth userinfo carries the evaluator ingest token; http_endpoint is vault-referenceable
+      http_endpoint: "{vault://<your vault>/guardrail-observer/ingest-endpoint}"   # https://kong:<INGEST_TOKEN>@evaluator.example.com/ingest/kong
+      timeout: 5000
+      queue: { max_batch_size: 50, max_coalescing_delay: 1, max_entries: 10000, max_retry_time: 120 }

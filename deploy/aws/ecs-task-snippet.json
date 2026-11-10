@@ -1,0 +1,22 @@
+{
+  "_comment": "Kong container definition fragment for ECS/Fargate. Variant A uses the built image; variant B mounts the plugin folders into the stock image.",
+  "variantA_builtImage": {
+    "image": "<account>.dkr.ecr.<region>.amazonaws.com/kong-guardrail-observer:3.10.0.19-go0.1.0",
+    "environment": [
+      { "name": "KONG_PLUGINS", "value": "bundled,guardrail-observer,guardrail-observer-tail" },
+      { "name": "KONG_REQUEST_DEBUG", "value": "on" }
+    ],
+    "secrets": [
+      { "name": "KONG_REQUEST_DEBUG_TOKEN", "valueFrom": "arn:aws:secretsmanager:<region>:<account>:secret:guardrail-observer/request-debug-token" }
+    ]
+  },
+  "variantB_stockImageWithMount": {
+    "image": "kong/kong-gateway:3.10.0.19",
+    "environment": [
+      { "name": "KONG_PLUGINS", "value": "bundled,guardrail-observer,guardrail-observer-tail" },
+      { "name": "KONG_LUA_PACKAGE_PATH", "value": "/opt/kong-plugins/?.lua;;" }
+    ],
+    "mountPoints": [ { "sourceVolume": "kong-plugins", "containerPath": "/opt/kong-plugins/kong/plugins", "readOnly": true } ],
+    "_note": "the volume must contain guardrail-observer/ and guardrail-observer-tail/ directories (EFS or an init container that copies them)"
+  }
+}

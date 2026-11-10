@@ -1,0 +1,58 @@
+// Grafana Alloy pipeline for guardrail-observer.
+//   OTLP/HTTP logs (evaluator) -> batch -> Loki OTLP endpoint (local or Grafana Cloud)
+//   Prometheus scrape (evaluator /metrics, Kong status /metrics) -> remote_write (local or Grafana Cloud)
+// Endpoints come from env so the same file serves local Compose and Grafana Cloud.
+
+logging {
+  level  = "warn"
+  format = "logfmt"
+}
+
+// ---------------------------------------------------------------- logs
+otelcol.receiver.otlp "evaluator" {
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  output {
+    logs = [otelcol.processor.batch.logs.input]
+  }
+}
+
+otelcol.processor.batch "logs" {
+  timeout          = "1s"
+  send_batch_size  = 200
+  output {
+    logs = [otelcol.exporter.otlphttp.loki.input]
+  }
+}
+
+// LOKI_AUTH_HEADER is empty for local Loki; scripts/setup.sh sets it to
+// "Basic <base64 user:token>" for Grafana Cloud.
+otelcol.exporter.otlphttp "loki" {
+  client {
+    endpoint = sys.env("LOKI_WRITE_URL")
+    headers  = { "Authorization" = sys.env("LOKI_AUTH_HEADER") }
+  }
+}
+
+// ------------------------------------------------------------- metrics
+prometheus.scrape "evaluator" {
+  targets         = [{ __address__ = "evaluator:8000", job = "guardrail-evaluator" }]
+  metrics_path    = "/metrics"
+  scrape_interval = "10s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.scrape "kong" {
+  targets         = [{ __address__ = "kong:8100", job = "kong" }]
+  metrics_path    = "/metrics"
+  scrape_interval = "10s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.remote_write "default" {
+  endpoint {
+    url     = sys.env("PROM_REMOTE_WRITE_URL")
+    headers = { "Authorization" = sys.env("PROM_AUTH_HEADER") }
+  }
+}

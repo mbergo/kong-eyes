@@ -1,0 +1,116 @@
+<form version="1.1" theme="dark">
+  <label>Guardrail Observer - overcatch, let-slip, enforcement</label>
+  <description>Adjudicated results use the newest adjudication_revision per unit. FPR=FP/(FP+TN), FNR=FN/(FN+TP), N/A when the denominator is 0. Benchmark numbers on a curated suite, not production rates. synthetic=true means a fixture guardrail.</description>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="tr"><label>Time</label><default><earliest>-24h@h</earliest><latest>now</latest></default></input>
+    <input type="text" token="index"><label>Index</label><default>main</default></input>
+    <input type="dropdown" token="environment" searchWhenChanged="true"><label>Environment</label><choice value="*">All</choice><default>*</default>
+      <fieldForLabel>environment</fieldForLabel><fieldForValue>environment</fieldForValue>
+      <search><query>index=$index$ sourcetype="kong:guardrail:evaluation" | stats count by environment</query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search></input>
+    <input type="dropdown" token="route" searchWhenChanged="true"><label>Route</label><choice value="*">All</choice><default>*</default>
+      <fieldForLabel>route</fieldForLabel><fieldForValue>route</fieldForValue>
+      <search><query>index=$index$ sourcetype="kong:guardrail:evaluation" | stats count by route</query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search></input>
+    <input type="dropdown" token="guardrail" searchWhenChanged="true"><label>Guardrail</label><choice value="*">All</choice><default>*</default>
+      <fieldForLabel>guardrail</fieldForLabel><fieldForValue>guardrail</fieldForValue>
+      <search><query>index=$index$ sourcetype="kong:guardrail:evaluation" event_type=adjudication | stats count by guardrail</query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search></input>
+    <input type="dropdown" token="policy_version" searchWhenChanged="true"><label>Policy version</label><choice value="*">All</choice><default>*</default>
+      <fieldForLabel>policy_version</fieldForLabel><fieldForValue>policy_version</fieldForValue>
+      <search><query>index=$index$ sourcetype="kong:guardrail:evaluation" event_type=adjudication | stats count by policy_version</query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search></input>
+    <input type="dropdown" token="category" searchWhenChanged="true"><label>Category</label><choice value="*">All</choice><default>*</default>
+      <fieldForLabel>category</fieldForLabel><fieldForValue>category</fieldForValue>
+      <search><query>index=$index$ sourcetype="kong:guardrail:evaluation" event_type=adjudication | stats count by category</query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search></input>
+    <input type="dropdown" token="stage" searchWhenChanged="true"><label>Stage</label><choice value="*">All</choice><choice value="input">input</choice><choice value="output">output</choice><default>*</default></input>
+    <input type="dropdown" token="run_id" searchWhenChanged="true"><label>Run (drill-down)</label><choice value="*">Latest per scope</choice><default>*</default>
+      <fieldForLabel>run_id</fieldForLabel><fieldForValue>run_id</fieldForValue>
+      <search><query>index=$index$ sourcetype="kong:guardrail:evaluation" event_type=adjudication | stats latest(_time) AS t by run_id | sort - t</query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search></input>
+  </fieldset>
+
+  <row>
+    <panel><title>Detector matrix (newest revision per unit)</title>
+      <table>
+        <search>
+          <query>index=$index$ sourcetype="kong:guardrail:evaluation" event_type=adjudication environment=$environment$ route=$route$ guardrail=$guardrail$ policy_version=$policy_version$ category=$category$ stage=$stage$ run_id=$run_id$
+| eval unit=run_id."|".case_id."|".trial."|".guardrail."|".stage | sort 0 - adjudication_revision | dedup unit
+| rename detector.outcome AS detector
+| stats count(eval(detector="TP")) AS TP count(eval(detector="FP")) AS FP count(eval(detector="FN")) AS FN count(eval(detector="TN")) AS TN count(eval(match(detector,"INCONCLUSIVE|EXCLUDED|ERROR"))) AS inconclusive count AS units max(adjudication_revision) AS revision values(synthetic) AS synthetic by environment route guardrail policy_version run_id
+| eval fp_den=FP+TN, fn_den=FN+TP
+| eval FPR=if(fp_den=0,"N/A",FP."/".fp_den." = ".round(FP/fp_den,3)), FNR=if(fn_den=0,"N/A",FN."/".fn_den." = ".round(FN/fn_den,3))
+| eval labeled_coverage=round((TP+FP+FN+TN)/units,3)
+| table run_id environment route guardrail policy_version revision synthetic units TP FP FN TN inconclusive FPR FNR labeled_coverage</query>
+          <earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel><title>Confirmed enforcement failures</title>
+      <single><search><query>index=$index$ sourcetype="kong:guardrail:evaluation" event_type=adjudication environment=$environment$ route=$route$ guardrail=$guardrail$ policy_version=$policy_version$ stage=$stage$ run_id=$run_id$
+| eval unit=run_id."|".case_id."|".trial."|".guardrail."|".stage | sort 0 - adjudication_revision | dedup unit
+| stats count(eval('enforcement.outcome'="ENFORCEMENT_FAILURE")) AS n</query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option><option name="rangeValues">[0]</option><option name="useColors">1</option></single>
+    </panel>
+    <panel><title>Benign blocked or altered (overcatch damage)</title>
+      <single><search><query>index=$index$ sourcetype="kong:guardrail:evaluation" event_type=adjudication environment=$environment$ route=$route$ guardrail=$guardrail$ policy_version=$policy_version$ stage=$stage$ run_id=$run_id$
+| eval unit=run_id."|".case_id."|".trial."|".guardrail."|".stage | sort 0 - adjudication_revision | dedup unit
+| stats count(eval(match('delivery.outcome',"BENIGN_BLOCKED|BENIGN_ALTERED"))) AS n</query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option><option name="rangeValues">[0]</option><option name="useColors">1</option></single>
+    </panel>
+    <panel><title>Violations delivered to client</title>
+      <single><search><query>index=$index$ sourcetype="kong:guardrail:evaluation" event_type=adjudication environment=$environment$ route=$route$ guardrail=$guardrail$ policy_version=$policy_version$ stage=$stage$ run_id=$run_id$
+| eval unit=run_id."|".case_id."|".trial."|".guardrail."|".stage | sort 0 - adjudication_revision | dedup unit
+| stats count(eval('delivery.outcome'="VIOLATION_DELIVERED")) AS n</query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option><option name="rangeValues">[0]</option><option name="useColors">1</option></single>
+    </panel>
+    <panel><title>Inconclusive / excluded / error</title>
+      <single><search><query>index=$index$ sourcetype="kong:guardrail:evaluation" event_type=adjudication environment=$environment$ route=$route$ guardrail=$guardrail$ policy_version=$policy_version$ stage=$stage$ run_id=$run_id$
+| eval unit=run_id."|".case_id."|".trial."|".guardrail."|".stage | sort 0 - adjudication_revision | dedup unit
+| stats count(eval(match('detector.outcome',"INCONCLUSIVE|EXCLUDED|ERROR"))) AS n</query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search>
+        <option name="rangeColors">["0x53a051","0xf8be34"]</option><option name="rangeValues">[0]</option><option name="useColors">1</option></single>
+    </panel>
+  </row>
+
+  <row>
+    <panel><title>Traffic volume by guardrail verdict (all observed requests; passive traffic shows actions only, never FP/FN)</title>
+      <chart><search><query>index=$index$ sourcetype="kong:guardrail:evaluation" event_type=kong_observation environment=$environment$ route=$route$
+| spath path=guardrails{} output=g | mvexpand g | spath input=g path=verdict output=verdict | spath input=g path=stage output=gstage
+| search gstage=$stage$
+| timechart span=5m count by verdict</query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search>
+        <option name="charting.chart">column</option><option name="charting.chart.stackMode">stacked</option></chart>
+    </panel>
+    <panel><title>Coverage and telemetry gaps</title>
+      <table><search><query>index=$index$ sourcetype="kong:guardrail:evaluation" event_type=kong_observation environment=$environment$ route=$route$
+| eval has_gap=if(mvcount(spath(_raw,"gaps{}"))>0,1,0), trusted='runner.trusted'
+| stats count AS observed sum(has_gap) AS with_gaps count(eval(trusted="true")) AS labeled_capable by environment route
+| eval passive_or_untrusted=observed-labeled_capable</query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search></table>
+    </panel>
+  </row>
+
+  <row>
+    <panel><title>Latency: gateway duration (observer, access to log) and client latency (runner)</title>
+      <table><search><query>index=$index$ sourcetype="kong:guardrail:evaluation" environment=$environment$ route=$route$ (event_type=kong_observation OR event_type=adjudication)
+| eval gw=if(event_type="kong_observation",duration_ms,null()), cl=if(event_type="adjudication",'client.latency_ms',null())
+| stats p50(gw) AS gateway_p50_ms p95(gw) AS gateway_p95_ms p99(gw) AS gateway_p99_ms p50(cl) AS client_p50_ms p95(cl) AS client_p95_ms count(gw) AS gateway_samples count(cl) AS client_samples by route
+| eval boundary="gateway: observer access->log inside Kong (excludes network, pre-access). client: send->last byte incl. model. Observer overhead: scripts/perf.sh A/B routes."</query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search></table>
+    </panel>
+  </row>
+
+  <row>
+    <panel><title>Case drill-down: expected vs verdict vs actual delivery (newest revision)</title>
+      <table><search><query>index=$index$ sourcetype="kong:guardrail:evaluation" event_type=adjudication environment=$environment$ route=$route$ guardrail=$guardrail$ policy_version=$policy_version$ category=$category$ stage=$stage$ run_id=$run_id$
+| eval unit=run_id."|".case_id."|".trial."|".guardrail."|".stage | sort 0 - adjudication_revision | dedup unit
+| table _time run_id adjudication_revision case_id trial guardrail stage category expected.action expected.violation verdict.value verdict.reason detector.outcome enforcement.outcome enforcement.reason delivery.outcome policy.outcome client.status gateway.status gateway.exit.plugin_name request_id gaps{}
+| sort run_id case_id trial</query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search>
+        <option name="drilldown">cell</option>
+        <drilldown><set token="request_id">$row.request_id$</set></drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row depends="$request_id$">
+    <panel><title>Gateway evidence for request $request_id$ (phase trace, exit attribution, stream timelines)</title>
+      <event><search><query>index=$index$ sourcetype="kong:guardrail:evaluation" event_type=kong_observation request_id="$request_id$"</query><earliest>$tr.earliest$</earliest><latest>$tr.latest$</latest></search></event>
+    </panel>
+  </row>
+</form>

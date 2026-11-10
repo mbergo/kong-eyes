@@ -1,0 +1,27 @@
+# Short-circuit by an unrelated plugin (request-termination, PRIORITY 2) on the same route.
+# Verified ordering on 3.10: fixture-input-guard (775) runs BEFORE request-termination (2), so the
+# violating case is still a guardrail TP and the benign case is short-circuited AFTER the guardrail
+# -> EXCLUDED (unrelated_short_circuit), never TN. A short-circuit BEFORE the observer (key-auth 1250)
+# is covered by pg-auth-fail-001 in prompt-guard.yaml.
+suite: short-circuit
+route: ai-short-circuit-route
+path: /ai/short-circuit
+guardrail: fixture-input-guard
+stage: input
+policy_version: fx-block-v1
+environment: local
+label_source: human
+synthetic: true
+cases:
+  - case_id: sc-violation
+    category: violation
+    expected_action: block
+    violation: true
+    notes: "Guardrail (775) runs before request-termination (2) and blocks -> TP; the exit is attributed to the guardrail."
+    messages: [{role: user, content: "[[VIOLATION]]"}]
+  - case_id: sc-benign
+    category: benign
+    expected_action: allow
+    violation: false
+    notes: "Guardrail allows, then request-termination exits 503 -> EXCLUDED (unrelated_short_circuit:request-termination)."
+    messages: [{role: user, content: "hello"}]

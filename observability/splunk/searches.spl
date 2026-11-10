@@ -1,0 +1,70 @@
+`comment("Guardrail Observer - SPL library. sourcetype defaults to kong:guardrail:evaluation.
+Every event is JSON under `event`; Splunk auto-extracts top-level fields (event_type, run_id, case_id, ...).
+IMPORTANT: adjudications are versioned. ALWAYS select the newest adjudication_revision per
+evaluation unit (run_id, case_id, trial, guardrail, stage) BEFORE counting, otherwise relabels inflate totals.
+Replace index=main with your index. Tested against Splunk Enterprise 9.x SPL semantics; stub-tested locally.")`
+
+`comment("---- base macro: newest revision per unit (paste as a saved macro `go_latest_adj`) ----")`
+index=main sourcetype="kong:guardrail:evaluation" event_type=adjudication
+| eval unit=run_id."|".case_id."|".trial."|".guardrail."|".stage
+| sort 0 - adjudication_revision
+| dedup unit
+`comment("-> every following search starts from this result set")`
+
+`comment("---- 1. detector matrix with FPR/FNR and N/A denominators (per run) ----")`
+index=main sourcetype="kong:guardrail:evaluation" event_type=adjudication
+| eval unit=run_id."|".case_id."|".trial."|".guardrail."|".stage | sort 0 - adjudication_revision | dedup unit
+| rename detector.outcome AS detector
+| stats count(eval(detector="TP")) AS TP count(eval(detector="FP")) AS FP count(eval(detector="FN")) AS FN count(eval(detector="TN")) AS TN
+        count(eval(match(detector,"INCONCLUSIVE|EXCLUDED|ERROR"))) AS inconclusive count AS units max(adjudication_revision) AS revision
+        values(synthetic) AS synthetic by environment route guardrail policy_version run_id
+| eval fp_den=FP+TN, fn_den=FN+TP
+| eval FPR=if(fp_den=0,"N/A",round(FP/fp_den,4)), FNR=if(fn_den=0,"N/A",round(FN/fn_den,4))
+| eval FPR_display=if(fp_den=0,"N/A",FP."/".fp_den), FNR_display=if(fn_den=0,"N/A",FN."/".fn_den)
+| eval labeled_coverage=round((TP+FP+FN+TN)/units,3)
+| sort - _time
+
+`comment("---- 2. enforcement failures, benign blocked/altered, violations delivered (separate from the matrix) ----")`
+index=main sourcetype="kong:guardrail:evaluation" event_type=adjudication
+| eval unit=run_id."|".case_id."|".trial."|".guardrail."|".stage | sort 0 - adjudication_revision | dedup unit
+| stats count(eval('enforcement.outcome'="ENFORCEMENT_FAILURE")) AS enforcement_failures
+        count(eval(match('delivery.outcome',"BENIGN_BLOCKED|BENIGN_ALTERED"))) AS benign_blocked_or_altered
+        count(eval('delivery.outcome'="VIOLATION_DELIVERED")) AS violations_delivered
+        count(eval('policy.outcome'="PASS_BY_OTHER_MEANS")) AS prevented_not_by_guardrail
+        by environment route guardrail policy_version run_id
+
+`comment("---- 3. traffic volume, guardrail actions, stage (all observations, labeled or not) ----")`
+index=main sourcetype="kong:guardrail:evaluation" event_type=kong_observation
+| spath path=guardrails{} output=g | mvexpand g
+| spath input=g path=verdict output=verdict | spath input=g path=stage output=gstage | spath input=g path=guardrail output=gname
+| timechart span=5m count by verdict
+`comment("by route/stage: ... | stats count by route gstage gname verdict")`
+
+`comment("---- 4. coverage & telemetry gaps ----")`
+index=main sourcetype="kong:guardrail:evaluation" event_type=kong_observation
+| eval has_gap=if(mvcount(spath(_raw,"gaps{}"))>0,1,0), trusted='runner.trusted'
+| stats count AS observed sum(has_gap) AS with_gaps count(eval(trusted="true")) AS labeled_capable by environment route
+| eval passive_or_untrusted=observed-labeled_capable
+
+`comment("---- 5. latency distribution (gateway duration from observer; client latency from adjudication.client) ----")`
+index=main sourcetype="kong:guardrail:evaluation" event_type=kong_observation
+| stats p50(duration_ms) AS p50 p95(duration_ms) AS p95 p99(duration_ms) AS p99 count by route
+`comment("client side: event_type=adjudication | stats p50(client.latency_ms) p95(client.latency_ms) by route")`
+
+`comment("---- 6. case drill-down: expected action, observed verdict, actual delivery, evidence ----")`
+index=main sourcetype="kong:guardrail:evaluation" event_type=adjudication run_id="$run_id$"
+| eval unit=run_id."|".case_id."|".trial."|".guardrail."|".stage | sort 0 - adjudication_revision | dedup unit
+| table _time case_id trial guardrail stage category expected.action expected.violation verdict.value verdict.reason detector.outcome enforcement.outcome enforcement.reason delivery.outcome policy.outcome client.status gateway.status gateway.exit.plugin_name request_id gaps{}
+| sort case_id trial
+
+`comment("---- 7. pivot: a request's full gateway evidence (phase trace, exit, stream timeline) ----")`
+index=main sourcetype="kong:guardrail:evaluation" event_type=kong_observation request_id="$request_id$"
+| table _time route response.status response.source exit.plugin_name exit.status upstream.kong_proxied upstream.ai_proxy_request_normalized ai.executed_filters{} plugin_chain{}.name stream.chunks stream.bytes tail.chunks tail.bytes gaps{}
+
+`comment("---- 8. smoke-test lookup (setup validation) ----")`
+index=main sourcetype="kong:guardrail:evaluation" event_type=smoke_test smoke_id="$smoke_id$" | table _time smoke_id message
+
+`comment("---- 9. run comparison ----")`
+index=main sourcetype="kong:guardrail:evaluation" event_type=adjudication run_id IN ("$run_a$","$run_b$")
+| eval unit=run_id."|".case_id."|".trial."|".guardrail."|".stage | sort 0 - adjudication_revision | dedup unit
+| chart count over case_id by run_id

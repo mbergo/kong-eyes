@@ -1,0 +1,19 @@
+# Kong Helm chart (kong/kong or kong/ingress) values fragment: data plane with the observer plugins.
+image:
+  repository: <account>.dkr.ecr.<region>.amazonaws.com/kong-guardrail-observer
+  tag: "3.10.0.19-go0.1.0"
+env:
+  plugins: bundled,guardrail-observer,guardrail-observer-tail
+  request_debug: "on"
+  request_debug_token:
+    valueFrom:
+      secretKeyRef: { name: guardrail-observer, key: request-debug-token }
+# Alternative without a custom image: the chart's `plugins.configMaps` mounts plugin folders and sets lua_package_path:
+# plugins:
+#   configMaps:
+#     - name: guardrail-observer
+#       pluginName: guardrail-observer
+#     - name: guardrail-observer-tail
+#       pluginName: guardrail-observer-tail
+# kubectl create configmap guardrail-observer --from-file=kong/plugins/guardrail-observer/
+# kubectl create configmap guardrail-observer-tail --from-file=kong/plugins/guardrail-observer-tail/

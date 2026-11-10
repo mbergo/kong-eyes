@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guardrail chain</title>
+<style>
+/* One screen: the chain drawn in 3D on the left (box height = p95 time in that guardrail), signals on the right. */
+:root { --ground:#f4f1ea; --surface:#fff; --raised:#ebe6dc; --ink:#1d1b1a; --muted:#5c574f; --hairline:#cfc8bb;
+  --client:#2f5d9f; --kong:#0b6f66; --model:#67409a; --probe:#46525e; --warn:#b8401f; --ok:#1f6b3a;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif; --mono: ui-monospace, SFMono-Regular, Menlo, monospace; }
+@media (prefers-color-scheme: dark) { :root { color-scheme: dark; --ground:#17161a; --surface:#222126; --raised:#2b2a30; --ink:#ece9e2;
+  --muted:#aaa49b; --hairline:#3a383f; --client:#8db2ea; --kong:#4fc9bb; --model:#bf9cec; --probe:#a2aeba; --warn:#ff8d68; --ok:#6fd296; } }
+* { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
+body { background: var(--ground); color: var(--ink); font: 14px/1.45 var(--sans); }
+.app { height: 100%; min-height: 480px; display: grid; grid-template-columns: minmax(0,1fr) 380px; }
+.stage { position: relative; overflow: hidden; }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.lbl { position: absolute; left: 0; top: 0; text-align: center; max-width: 150px; font-size: 11px; line-height: 1.25; font-weight: 600;
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: 3px; padding: 2px 6px; }
+.lbl small { display: block; font: 400 10px var(--mono); color: var(--muted); white-space: nowrap; }
+.lbl.warn { border-color: var(--warn); } .lbl.warn b { color: var(--warn); }
+.lbl.probe { background: transparent; border-color: transparent; font: 400 10px var(--mono); color: var(--muted); }
+.hud { position: absolute; left: 16px; top: 12px; right: 16px; pointer-events: none; }
+.hud h1 { margin: 0; font-size: 17px; } .hud p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+.rail { border-left: 1px solid var(--hairline); background: var(--surface); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+h2 { margin: 0 0 6px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+button { font: inherit; font-size: 12.5px; color: var(--ink); background: transparent; border: 1px solid var(--hairline); border-radius: 4px; padding: 4px 8px; cursor: pointer; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.sig { border: 1px solid var(--hairline); border-left: 3px solid var(--probe); border-radius: 4px; padding: 7px 10px; font-size: 13px; }
+.sig.warn { border-left-color: var(--warn); } .sig .k { font: 600 10.5px var(--mono); color: var(--muted); }
+.list { display: flex; flex-direction: column; gap: 6px; }
+.note, label { font-size: 12px; color: var(--muted); } .head { font-weight: 600; }
+table { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 3px 4px; border-bottom: 1px solid var(--hairline); } th:first-child, td:first-child { text-align: left; }
+th { color: var(--muted); font-weight: 400; }
+@media (max-width: 860px) { .app { grid-template-columns: 1fr; grid-template-rows: 52% 48%; } .rail { border-left: 0; border-top: 1px solid var(--hairline); } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="stage" id="stage">
+    <canvas id="c"></canvas><div class="labels" id="labels"></div>
+    <div class="hud"><h1>Guardrail chain, live</h1><p id="sub">Request enters on the left. Box height is p95 time spent in that guardrail. Drag to orbit.</p></div>
+  </div>
+  <aside class="rail">
+    <section><h2>Route</h2><div class="seg" id="routes"></div></section>
+    <section><label><input type="checkbox" id="runs"> include labelled test runs</label> <span class="note" id="win"></span></section>
+    <section><h2>Guardrails on this route</h2><table id="tbl"></table></section>
+    <section><h2>In plain language</h2><div class="head" id="headline">No translation yet. POST /passive/translate to create one.</div><div class="note" id="prov"></div></section>
+    <section><h2>Signals to investigate</h2><div class="list" id="signals"></div></section>
+    <p class="note">Signals are places to look, not verdicts: ordinary traffic carries no labels, so nothing here proves a guardrail right or wrong.</p>
+  </aside>
+</div>
+<script>
+(function () {
+"use strict";
+var $ = function (id) { return document.getElementById(id); };
+var stage = $("stage"), canvas = $("c"), ctx = canvas.getContext("2d"), labelsEl = $("labels");
+var col = {}, W = 1, H = 1, cam = {}, view = { theta: -0.3, phi: 1.0, dist: 46, tx: 0, ty: 1.6, tz: 0 };
+var data = null, route = null, boxes = [], labels = [];
+function theme() { var cs = getComputedStyle(document.documentElement);
+  ["ground","surface","raised","ink","muted","hairline","client","kong","model","probe","warn","ok"].forEach(function (k) { col[k] = cs.getPropertyValue("--" + k).trim(); }); }
+theme(); if (window.matchMedia) { var mq = matchMedia("(prefers-color-scheme: dark)"); if (mq.addEventListener) mq.addEventListener("change", theme); }
+
+function setCam() {
+  var sp = Math.sin(view.phi), cp = Math.cos(view.phi);
+  cam.x = view.tx + view.dist * sp * Math.sin(view.theta); cam.y = view.ty + view.dist * cp; cam.z = view.tz + view.dist * sp * Math.cos(view.theta);
+  var fx = view.tx - cam.x, fy = view.ty - cam.y, fz = view.tz - cam.z, fl = Math.sqrt(fx*fx + fy*fy + fz*fz); fx /= fl; fy /= fl; fz /= fl;
+  var rx = -fz, rz = fx, rl = Math.sqrt(rx*rx + rz*rz) || 1; rx /= rl; rz /= rl;
+  cam.f = [fx, fy, fz]; cam.r = [rx, 0, rz]; cam.u = [-rz*fy, rz*fx - rx*fz, rx*fy]; cam.k = (H / 2) / Math.tan(15 * Math.PI / 180);
+}
+function proj(x, y, z) {
+  var dx = x - cam.x, dy = y - cam.y, dz = z - cam.z, zz = dx*cam.f[0] + dy*cam.f[1] + dz*cam.f[2]; if (zz < 0.5) return null;
+  return [W/2 + (dx*cam.r[0] + dz*cam.r[2]) * cam.k / zz, H/2 - (dx*cam.u[0] + dy*cam.u[1] + dz*cam.u[2]) * cam.k / zz, zz];
+}
+function drawBox(b, fill, alpha, edge, lw) {
+  var c = [], xs = [b.x0, b.x1], ys = [b.y0, b.y1], zs = [b.z0, b.z1];
+  for (var i = 0; i < 8; i++) { var p = proj(xs[i & 1], ys[(i >> 1) & 1], zs[(i >> 2) & 1]); if (!p) return; c.push(p); }
+  var faces = [];
+  if (cam.x > b.x1) faces.push([[c[1],c[3],c[7],c[5]], .10]); else if (cam.x < b.x0) faces.push([[c[0],c[2],c[6],c[4]], .10]);
+  if (cam.z > b.z1) faces.push([[c[4],c[5],c[7],c[6]], .05]); else if (cam.z < b.z0) faces.push([[c[0],c[1],c[3],c[2]], .05]);
+  if (cam.y > b.y1) faces.push([[c[2],c[3],c[7],c[6]], 0]);
+  ctx.lineJoin = "round";
+  faces.forEach(function (f) {
+    ctx.beginPath(); ctx.moveTo(f[0][0][0], f[0][0][1]); for (var i = 1; i < 4; i++) ctx.lineTo(f[0][i][0], f[0][i][1]); ctx.closePath();
+    ctx.globalAlpha = alpha; ctx.fillStyle = fill; ctx.fill();
+    if (f[1]) { ctx.globalAlpha = f[1] * alpha; ctx.fillStyle = col.ink; ctx.fill(); }
+    ctx.globalAlpha = 1; ctx.strokeStyle = edge; ctx.lineWidth = lw; ctx.stroke();
+  });
+}
+function pct(v) { return v == null ? "n/a" : Math.round(v * 100) + "%"; }
+
+function build() {
+  boxes = []; labelsEl.innerHTML = ""; labels = [];
+  if (!data || !route || !data.routes[route]) return;
+  var r = data.routes[route], chain = (r.chain || []).filter(function (c) { return c.name !== "guardrail-observer" && c.name !== "guardrail-observer-tail" && c.kind !== "plugin"; });
+  var warn = {}; (data.signals || []).forEach(function (s) { if (s.severity === "warn" && s.guardrail && (!s.route || s.route === route)) warn[s.guardrail] = true; });
+  var items = [{ name: "client", kind: "end" }].concat(chain).concat([{ name: "model provider", kind: "end2" }]);
+  var x = 0, widths = items.map(function (c) { return c.kind === "probe" ? 0.5 : 3.4; }), total = widths.reduce(function (a, b) { return a + b + 1.1; }, -1.1);
+  x = -total / 2;
+  items.forEach(function (c, i) {
+    var w = widths[i], g = data.guardrails[c.name], h = 0.5, sub = "";
+    if (c.kind === "guardrail" && g) {
+      var p95 = g.latency_ms && g.latency_ms.p95;
+      h = 0.7 + Math.min(5, Math.log(1 + (p95 || 0)) / Math.LN10 * 1.6);
+      sub = "stopped/altered " + pct(g.intervention_rate) + (p95 != null ? " · p95 " + p95 + " ms" : " · p95 n/a");
+    } else if (c.kind === "router") { h = 1.0; sub = "routes to the model"; }
+    else if (c.kind === "probe") { h = 0.25; }
+    else { h = 0.8; }
+    var edge = c.kind === "guardrail" ? (warn[c.name] ? col.warn : col.kong) : c.kind === "router" || c.kind === "end2" ? col.model : c.kind === "probe" ? col.probe : col.client;
+    boxes.push({ x0: x, x1: x + w, y0: 0.3, y1: 0.3 + h, z0: c.kind === "probe" ? -1.6 : -1.1, z1: c.kind === "probe" ? 1.6 : 1.1, edge: edge,
+                 fill: warn[c.name] ? col.warn : col.surface, alpha: warn[c.name] ? 0.35 : c.kind === "probe" ? 0.4 : 1 });
+    var el = document.createElement("div"); el.className = "lbl" + (c.kind === "probe" ? " probe" : "") + (warn[c.name] ? " warn" : "");
+    var b = document.createElement("b"); b.textContent = c.kind === "probe" ? String(c.priority) : c.name; el.appendChild(b);
+    if (sub) { var s = document.createElement("small"); s.textContent = sub; el.appendChild(s); }
+    labelsEl.appendChild(el); labels.push({ el: el, x: x + w / 2, y: 0.3 + h + 0.35, z: 0 });
+    x += w + 1.1;
+  });
+  view.dist = Math.max(22, total * 1.08 / (0.536 * (W / H)));
+  boxes.total = total;
+}
+function draw() {
+  setCam(); ctx.clearRect(0, 0, W, H);
+  var t = (boxes.total || 20) / 2 + 1.5;
+  drawBox({ x0: -t, x1: t, y0: 0, y1: 0.3, z0: -2.6, z1: 2.6 }, col.raised, 0.55, col.kong, 1.3);
+  var p = proj(-t, 0.9, 0), q = proj(t, 0.9, 0);
+  if (p && q) { ctx.strokeStyle = col.ok; ctx.globalAlpha = .5; ctx.lineWidth = 2; ctx.setLineDash([6, 5]); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; }
+  boxes.slice().sort(function (a, b) { var da = Math.pow(a.x0 - cam.x, 2) + Math.pow(cam.z, 2), db = Math.pow(b.x0 - cam.x, 2) + Math.pow(cam.z, 2); return db - da; })
+    .forEach(function (b) { drawBox(b, b.fill, b.alpha, b.edge, 1.5); });
+  labels.forEach(function (l) { var p = proj(l.x, l.y, l.z); if (!p) { l.el.style.visibility = "hidden"; return; } l.el.style.visibility = "";
+    l.el.style.transform = "translate(" + p[0].toFixed(1) + "px," + p[1].toFixed(1) + "px) translate(-50%,-100%)"; });
+  requestAnimationFrame(draw);
+}
+function rail() {
+  var names = Object.keys(data.routes).filter(function (n) { return data.routes[n].ai_route; }).sort();
+  if (!route || names.indexOf(route) < 0) route = names.sort(function (a, b) { return data.routes[b].guardrails_enabled.length - data.routes[a].guardrails_enabled.length; })[0] || null;
+  var rb = $("routes"); rb.innerHTML = "";
+  names.sort().forEach(function (n) { var b = document.createElement("button"); b.textContent = n + " (" + data.routes[n].requests + ")"; b.setAttribute("aria-pressed", n === route ? "true" : "false");
+    b.addEventListener("click", function () { route = n; rail(); build(); }); rb.appendChild(b); });
+  if (!names.length) rb.textContent = "No AI traffic in the window yet.";
+  $("win").textContent = data.window.requests + " request(s) in the last " + Math.round(data.window.seconds / 60) + " min";
+  var tbl = $("tbl"); tbl.innerHTML = "<tr><th>guardrail</th><th>reached</th><th>stopped</th><th>altered</th><th>p95 ms</th><th>fail-open?</th></tr>";
+  var r = route && data.routes[route];
+  (r ? r.guardrails_enabled : []).forEach(function (n) { var g = data.guardrails[n]; if (!g) return; var tr = document.createElement("tr");
+    [n, g.reached, g.blocked, g.enforced_inline, g.latency_ms ? g.latency_ms.p95 : "n/a", g.fail_open_suspects].forEach(function (v) { var td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+    tbl.appendChild(tr); });
+  var sg = $("signals"); sg.innerHTML = "";
+  (data.signals || []).filter(function (s) { return !s.route || s.route === route || !route; }).forEach(function (s) {
+    var d = document.createElement("div"); d.className = "sig " + s.severity; var k = document.createElement("div"); k.className = "k"; k.textContent = s.kind;
+    var t = document.createElement("div"); t.textContent = s.summary; d.appendChild(k); d.appendChild(t); sg.appendChild(d); });
+  if (!sg.children.length) sg.textContent = "Nothing flagged in this window.";
+}
+function load() {
+  var q = "passive/summary?window_s=900" + ($("runs").checked ? "&include_runs=true" : "");
+  fetch(q).then(function (r) { return r.json(); }).then(function (d) { data = d; rail(); build(); }).catch(function (e) { $("sub").textContent = "Could not load /passive/summary: " + e.message; });
+  fetch("passive/findings").then(function (r) { return r.json(); }).then(function (f) { if (f && f.headline) { $("headline").textContent = f.headline;
+    $("prov").textContent = "translator: " + f.provider + (f.model ? " (" + f.model + ")" : "") + " · " + new Date(f.generated_at_ms).toLocaleString(); } }).catch(function () {});
+}
+function resize() { var r = stage.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2); W = Math.max(1, r.width); H = Math.max(1, r.height);
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); build(); }
+if (window.ResizeObserver) new ResizeObserver(resize).observe(stage); window.addEventListener("resize", resize); resize();
+var drag = null;
+canvas.addEventListener("pointerdown", function (e) { drag = { x: e.clientX, y: e.clientY }; try { canvas.setPointerCapture(e.pointerId); } catch (x) {} });
+canvas.addEventListener("pointermove", function (e) { if (!drag) return; view.theta -= (e.clientX - drag.x) * 0.006; view.phi = Math.max(0.25, Math.min(1.5, view.phi - (e.clientY - drag.y) * 0.005)); drag = { x: e.clientX, y: e.clientY }; });
+canvas.addEventListener("pointerup", function () { drag = null; }); canvas.addEventListener("pointercancel", function () { drag = null; });
+canvas.addEventListener("wheel", function (e) { e.preventDefault(); view.dist = Math.max(14, Math.min(160, view.dist * (1 + (e.deltaY > 0 ? 1 : -1) * 0.08))); }, { passive: false });
+$("runs").addEventListener("change", load);
+load(); setInterval(load, 10000); requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>

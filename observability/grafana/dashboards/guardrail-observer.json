@@ -1,0 +1,2878 @@
+{
+ "uid": "guardrail-observer",
+ "title": "Guardrail Observer - overcatch, let-slip, enforcement",
+ "tags": [
+  "kong",
+  "guardrail",
+  "ai"
+ ],
+ "timezone": "browser",
+ "schemaVersion": 39,
+ "version": 1,
+ "editable": true,
+ "refresh": "30s",
+ "time": {
+  "from": "now-6h",
+  "to": "now"
+ },
+ "templating": {
+  "list": [
+   {
+    "name": "environment",
+    "label": "Environment",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "go-prom"
+    },
+    "query": {
+     "query": "label_values(go_eval_units, environment)",
+     "refId": "v"
+    },
+    "definition": "label_values(go_eval_units, environment)",
+    "includeAll": true,
+    "multi": true,
+    "refresh": 2,
+    "sort": 1,
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    },
+    "allValue": ".*"
+   },
+   {
+    "name": "route",
+    "label": "Route",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "go-prom"
+    },
+    "query": {
+     "query": "label_values(go_eval_units, route)",
+     "refId": "v"
+    },
+    "definition": "label_values(go_eval_units, route)",
+    "includeAll": true,
+    "multi": true,
+    "refresh": 2,
+    "sort": 1,
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    },
+    "allValue": ".*"
+   },
+   {
+    "name": "guardrail",
+    "label": "Guardrail",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "go-prom"
+    },
+    "query": {
+     "query": "label_values(go_eval_units, guardrail)",
+     "refId": "v"
+    },
+    "definition": "label_values(go_eval_units, guardrail)",
+    "includeAll": true,
+    "multi": true,
+    "refresh": 2,
+    "sort": 1,
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    },
+    "allValue": ".*"
+   },
+   {
+    "name": "policy_version",
+    "label": "Policy version",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "go-prom"
+    },
+    "query": {
+     "query": "label_values(go_eval_units, policy_version)",
+     "refId": "v"
+    },
+    "definition": "label_values(go_eval_units, policy_version)",
+    "includeAll": true,
+    "multi": true,
+    "refresh": 2,
+    "sort": 1,
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    },
+    "allValue": ".*"
+   },
+   {
+    "name": "category",
+    "label": "Category",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "go-prom"
+    },
+    "query": {
+     "query": "label_values(go_eval_units_by_category, category)",
+     "refId": "v"
+    },
+    "definition": "label_values(go_eval_units_by_category, category)",
+    "includeAll": true,
+    "multi": true,
+    "refresh": 2,
+    "sort": 1,
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    },
+    "allValue": ".*"
+   },
+   {
+    "name": "suite",
+    "label": "Suite",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "go-prom"
+    },
+    "query": {
+     "query": "label_values(go_eval_units, suite)",
+     "refId": "v"
+    },
+    "definition": "label_values(go_eval_units, suite)",
+    "includeAll": true,
+    "multi": true,
+    "refresh": 2,
+    "sort": 1,
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    },
+    "allValue": ".*"
+   },
+   {
+    "name": "live_route",
+    "label": "Live route",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "go-prom"
+    },
+    "query": {
+     "query": "label_values(go_live_requests, route)",
+     "refId": "v"
+    },
+    "definition": "label_values(go_live_requests, route)",
+    "includeAll": true,
+    "multi": true,
+    "refresh": 2,
+    "sort": 1,
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    },
+    "allValue": ".*"
+   },
+   {
+    "name": "live_guardrail",
+    "label": "Live guardrail",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "go-prom"
+    },
+    "query": {
+     "query": "label_values(go_live_guardrail_reached, guardrail)",
+     "refId": "v"
+    },
+    "definition": "label_values(go_live_guardrail_reached, guardrail)",
+    "includeAll": true,
+    "multi": true,
+    "refresh": 2,
+    "sort": 1,
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    },
+    "allValue": ".*"
+   },
+   {
+    "name": "stage",
+    "label": "Stage",
+    "type": "custom",
+    "query": "input,output",
+    "includeAll": true,
+    "multi": true,
+    "allValue": ".*",
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    },
+    "options": [
+     {
+      "text": "All",
+      "value": "$__all",
+      "selected": true
+     },
+     {
+      "text": "input",
+      "value": "input",
+      "selected": false
+     },
+     {
+      "text": "output",
+      "value": "output",
+      "selected": false
+     }
+    ]
+   },
+   {
+    "name": "request_id",
+    "label": "Request id (drill-down)",
+    "type": "textbox",
+    "query": "",
+    "current": {
+     "text": "",
+     "value": ""
+    }
+   }
+  ]
+ },
+ "panels": [
+  {
+   "id": 1,
+   "type": "text",
+   "title": "Read me first",
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 3
+   },
+   "options": {
+    "mode": "markdown",
+    "content": "**Adjudicated** panels are recomputed gauges over the *newest revision of the newest finalized run per scope* (environment, route, guardrail, policy_version, suite). Label corrections lower numbers; nothing here is an ever-increasing counter.  \n**FPR = FP/(FP+TN)**, **FNR = FN/(FN+TP)**; shown as *N/A* when the denominator is 0. **Missing data is shown as `no data`, never as 0 errors.**  \nResults on a curated, attack-heavy suite are **benchmark numbers, not production rates**. `synthetic=1` means the guardrail under test is a fixture.  \nDetector accuracy (TP/FP/FN/TN), enforcement (did a detected violation still reach the client?) and delivery (what the client got) are separate columns on purpose: a model refusal is not a guardrail block, and an HTTP status is not a verdict."
+   }
+  },
+  {
+   "id": 2,
+   "type": "row",
+   "title": "Live traffic - signals to investigate (ordinary requests, no labels)",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 3,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 3,
+   "type": "text",
+   "title": "How to read this row",
+   "gridPos": {
+    "x": 0,
+    "y": 4,
+    "w": 24,
+    "h": 2
+   },
+   "options": {
+    "mode": "markdown",
+    "content": "Computed from the probe trail on ordinary traffic over the evaluator's window (`PASSIVE_WINDOW_S`, default 15 min). **Nothing here is a verdict**: without labels a block cannot be called wrong, only unusual. Each number is a place to look. The same data with the evidence behind it: evaluator `/passive/summary`; drawn as a chain: evaluator `/chain`."
+   }
+  },
+  {
+   "id": 4,
+   "type": "stat",
+   "title": "Signals (warn)",
+   "description": "Signals marked warn in the window. See the table below for which.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 6,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_live_signals{severity=\"warn\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 5,
+   "type": "stat",
+   "title": "Coverage findings",
+   "description": "AI routes with no guardrail, a disabled guardrail, a guardrail present on peer routes but not here, or no probes.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 4,
+    "y": 6,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_live_coverage_findings{route=~\"$live_route\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 6,
+   "type": "stat",
+   "title": "Suspected fail-open",
+   "description": "Requests allowed after spending about the guardrail's configured timeout in its gap, with no decision recorded.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 6,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_live_guardrail_fail_open_suspects{guardrail=~\"$live_guardrail\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 7,
+   "type": "stat",
+   "title": "Ran without a decision",
+   "description": "The guardrail's position was reached but it recorded no verdict.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 6,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_live_guardrail_no_verdict{guardrail=~\"$live_guardrail\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 8,
+   "type": "stat",
+   "title": "Flagged but still served",
+   "description": "Expected in detect-only mode; a slip if the guardrail is meant to block.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 6,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_live_guardrail_detected_not_enforced{guardrail=~\"$live_guardrail\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 9,
+   "type": "stat",
+   "title": "Guardrail config changes",
+   "description": "Changes of the guardrail config fingerprint seen in the window. Compare block rate before and after in /passive/summary.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 20,
+    "y": 6,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_live_config_changes{route=~\"$live_route\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 10,
+   "type": "timeseries",
+   "title": "Share of requests stopped or altered, per guardrail",
+   "description": "(blocked + altered) / reached. A jump is either an attack wave or overcatching: sample the affected requests.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 10,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "go_live_guardrail_block_rate{guardrail=~\"$live_guardrail\"}",
+     "legendFormat": "{{guardrail}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 11,
+   "type": "timeseries",
+   "title": "Time spent in each guardrail (p95)",
+   "description": "Timestamp difference between the probes on either side of the guardrail. Missing for guardrails that share a gap.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 10,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "go_live_guardrail_latency_ms{guardrail=~\"$live_guardrail\", quantile=\"p95\"}",
+     "legendFormat": "{{guardrail}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 12,
+   "type": "timeseries",
+   "title": "Guardrail chain share of gateway time (median)",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 10,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "go_live_chain_share{route=~\"$live_route\"}",
+     "legendFormat": "{{route}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 13,
+   "type": "timeseries",
+   "title": "After a block: what the same caller did next",
+   "description": "Retries that get through after a block: callers rephrasing honest requests (overcatch) or stepping around the block (slip).",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 18,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "sum by (guardrail, outcome) (go_live_after_block{guardrail=~\"$live_guardrail\", outcome=~\"retry_.*\"})",
+     "legendFormat": "{{guardrail}} {{outcome}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 14,
+   "type": "timeseries",
+   "title": "Bodies rewritten across a guardrail",
+   "description": "Hash of the request (or response) differs between the probes around the guardrail.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 18,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "sum by (guardrail, side) (go_live_guardrail_rewrites{guardrail=~\"$live_guardrail\"})",
+     "legendFormat": "{{guardrail}} {{side}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 15,
+   "type": "timeseries",
+   "title": "Signals by kind",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 18,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "sum by (kind, severity) (go_live_signals)",
+     "legendFormat": "{{severity}} {{kind}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 16,
+   "type": "timeseries",
+   "title": "Coverage findings by route",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 26,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "sum by (route, kind) (go_live_coverage_findings{route=~\"$live_route\"})",
+     "legendFormat": "{{route}} {{kind}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 17,
+   "type": "timeseries",
+   "title": "Streaming: time to first chunk",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 26,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "go_live_time_to_first_chunk_ms",
+     "legendFormat": "{{quantile}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 18,
+   "type": "timeseries",
+   "title": "Tokens and request facts in the window",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 26,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "go_live_tokens",
+     "legendFormat": "{{type}}",
+     "instant": false
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "go_live_traffic{fact=~\"retried|upstream_errors|model_mismatch|streamed\"}",
+     "legendFormat": "{{fact}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 19,
+   "type": "logs",
+   "title": "Findings in plain language (POST /passive/translate; Claude API, Bedrock, or the offline translator)",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 34,
+    "w": 24,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "{service_name=\"guardrail-evaluator\", event_type=\"findings\"}",
+     "datasource": {
+      "type": "loki",
+      "uid": "go-loki"
+     }
+    }
+   ],
+   "options": {
+    "showTime": true,
+    "wrapLogMessage": true,
+    "prettifyLogMessage": true,
+    "enableLogDetails": true,
+    "sortOrder": "Descending"
+   }
+  },
+  {
+   "id": 20,
+   "type": "row",
+   "title": "Adjudicated results - latest run per scope",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 42,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 21,
+   "type": "stat",
+   "title": "True positives (violation flagged)",
+   "description": "Violations the guardrail flagged.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 43,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_eval_units{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\", outcome=\"TP\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 22,
+   "type": "stat",
+   "title": "False positives (benign flagged)",
+   "description": "Overcatching at the detector level.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 4,
+    "y": 43,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_eval_units{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\", outcome=\"FP\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 23,
+   "type": "stat",
+   "title": "False negatives (violation missed)",
+   "description": "Let-slip at the detector level.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 43,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_eval_units{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\", outcome=\"FN\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 24,
+   "type": "stat",
+   "title": "True negatives (benign passed)",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 43,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_eval_units{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\", outcome=\"TN\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 25,
+   "type": "stat",
+   "title": "Inconclusive / excluded / error",
+   "description": "Units with no matrix classification (missing verdict, not_run, unrelated failure, timeout). Never counted as TN.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 43,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_eval_units{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\", outcome=~\"INCONCLUSIVE|EXCLUDED|ERROR\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 26,
+   "type": "stat",
+   "title": "Labeled coverage",
+   "description": "Share of units that got a binary classification.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 20,
+    "y": 43,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "avg(go_eval_labeled_coverage{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     },
+     "decimals": 0
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 27,
+   "type": "stat",
+   "title": "FPR = FP/(FP+TN)",
+   "description": "Omitted by the evaluator when FP+TN = 0 -> shows N/A.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 47,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "avg(go_eval_fpr{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "noValue": "N/A",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 28,
+   "type": "stat",
+   "title": "FP denominator (FP+TN)",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 4,
+    "y": 47,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_eval_fpr_denominator{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 29,
+   "type": "stat",
+   "title": "FNR = FN/(FN+TP)",
+   "description": "Omitted by the evaluator when FN+TP = 0 -> shows N/A.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 47,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "avg(go_eval_fnr{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "noValue": "N/A",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 30,
+   "type": "stat",
+   "title": "FN denominator (FN+TP)",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 47,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_eval_fnr_denominator{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 31,
+   "type": "stat",
+   "title": "Confirmed enforcement failures",
+   "description": "Detected violations that still reached the client (detect-only mode, late stream abort, dispatched to model).",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 47,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_eval_enforcement_failures{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 32,
+   "type": "stat",
+   "title": "Benign blocked or altered",
+   "description": "Client-visible overcatch damage (separate from FP count).",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 20,
+    "y": 47,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_eval_benign_blocked{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 33,
+   "type": "stat",
+   "title": "Violations delivered to client",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 51,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(go_eval_violations_delivered{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 34,
+   "type": "stat",
+   "title": "Manifest reconciled",
+   "description": "1 when adjudicated units == runner manifest.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 4,
+    "y": 51,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "min(go_eval_manifest_reconciled{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "unknown",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 35,
+   "type": "stat",
+   "title": "Adjudication revision",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 51,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(go_eval_revision{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 36,
+   "type": "stat",
+   "title": "Synthetic fixture under test?",
+   "description": "1 = results come from a deliberately faulty fixture guardrail used to validate the evaluator.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 51,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(go_eval_synthetic{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\"})",
+     "instant": true,
+     "range": false,
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "no data",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 37,
+   "type": "timeseries",
+   "title": "Units by category and outcome",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 51,
+    "w": 8,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "sum by (category, outcome) (go_eval_units_by_category{environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", policy_version=~\"$policy_version\", suite=~\"$suite\", outcome=~\"TP|FP|FN|TN\"})",
+     "legendFormat": "{{category}} {{outcome}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 38,
+   "type": "row",
+   "title": "Traffic volume, guardrail actions and stages (all observed requests, labeled or not)",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 55,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 39,
+   "type": "timeseries",
+   "title": "Observed requests by guardrail verdict",
+   "description": "Verdict announced by the observer adapters (allow/deny/detect/not_run/unknown). Passive traffic shows actions and coverage only - never FP/FN rates.",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 56,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "loki",
+      "uid": "go-loki"
+     },
+     "expr": "sum by (outcome) (count_over_time({service_name=\"guardrail-evaluator\", environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", stage=~\"$stage\", category=~\"$category\", event_type=\"kong_observation\"}[$__auto]))",
+     "legendFormat": "{{outcome}}",
+     "queryType": "range"
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "stacking": {
+       "mode": "normal"
+      },
+      "fillOpacity": 15
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 40,
+   "type": "timeseries",
+   "title": "Observed requests by route and stage",
+   "description": "",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 56,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "loki",
+      "uid": "go-loki"
+     },
+     "expr": "sum by (route, stage) (count_over_time({service_name=\"guardrail-evaluator\", environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", stage=~\"$stage\", category=~\"$category\", event_type=\"kong_observation\"}[$__auto]))",
+     "legendFormat": "{{route}} / {{stage}}",
+     "queryType": "range"
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "stacking": {
+       "mode": "normal"
+      },
+      "fillOpacity": 15
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 41,
+   "type": "timeseries",
+   "title": "Kong proxy requests (native prometheus plugin)",
+   "description": "From Kong's bundled prometheus plugin scraped on :8100. Status codes alone never prove allow/block.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 64,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "sum by (route, code) (rate(kong_http_requests_total[$__rate_interval]))",
+     "legendFormat": "{{route}} {{code}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 42,
+   "type": "timeseries",
+   "title": "Evidence gaps per request (observer-reported)",
+   "description": "Requests whose observation lists at least one gap (request body in file, exit without attribution, adapter error...).",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 64,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "loki",
+      "uid": "go-loki"
+     },
+     "expr": "sum by (outcome) (count_over_time({service_name=\"guardrail-evaluator\", environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", stage=~\"$stage\", category=~\"$category\", event_type=\"kong_observation\"} | json | gaps != \"[]\" [$__auto]))",
+     "legendFormat": "with gaps ({{outcome}})",
+     "queryType": "range"
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 43,
+   "type": "row",
+   "title": "Latency and observer overhead",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 72,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 44,
+   "type": "timeseries",
+   "title": "Gateway duration (observer access->log), p50/p95/p99",
+   "description": "Measured inside Kong by the observer: first access handler (priority 790) to log phase. Excludes client<->Kong network and nginx pre-access time.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 73,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "histogram_quantile(0.5, sum by (le, route) (rate(go_gateway_duration_ms_bucket{route=~\"$route\"}[$__rate_interval])))",
+     "legendFormat": "p50 {{route}}",
+     "instant": false
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "histogram_quantile(0.95, sum by (le, route) (rate(go_gateway_duration_ms_bucket{route=~\"$route\"}[$__rate_interval])))",
+     "legendFormat": "p95 {{route}}",
+     "instant": false
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "histogram_quantile(0.99, sum by (le, route) (rate(go_gateway_duration_ms_bucket{route=~\"$route\"}[$__rate_interval])))",
+     "legendFormat": "p99 {{route}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 45,
+   "type": "timeseries",
+   "title": "Client latency (runner), p50/p95",
+   "description": "Measured by the runner: request sent to last byte received, including the model.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 73,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "histogram_quantile(0.5, sum by (le, route) (rate(go_client_latency_ms_bucket{route=~\"$route\"}[$__rate_interval])))",
+     "legendFormat": "p50 {{route}}",
+     "instant": false
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "histogram_quantile(0.95, sum by (le, route) (rate(go_client_latency_ms_bucket{route=~\"$route\"}[$__rate_interval])))",
+     "legendFormat": "p95 {{route}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 46,
+   "type": "text",
+   "title": "Observer overhead - measurement boundary",
+   "gridPos": {
+    "x": 0,
+    "y": 81,
+    "w": 24,
+    "h": 3
+   },
+   "options": {
+    "mode": "markdown",
+    "content": "Overhead is measured by **A/B routes** in `scripts/perf.sh` (identical route with and without the observer plugins), reported as the difference of client-side p50/p95 and of Kong's own `kong_request_latency_ms`/`kong_kong_latency_ms`. In-band numbers above include the model and cannot isolate the observer."
+   }
+  },
+  {
+   "id": 47,
+   "type": "row",
+   "title": "Pipeline health - telemetry gaps",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 84,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 48,
+   "type": "timeseries",
+   "title": "Ingestion (events/s)",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 85,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "sum by (source, result) (rate(go_ingest_events_total[$__rate_interval]))",
+     "legendFormat": "{{source}} {{result}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 49,
+   "type": "timeseries",
+   "title": "Export outbox by destination/status",
+   "description": "pending/failed growing = destination outage. Queues are independent per destination.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 85,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "sum by (destination, status) (go_outbox_events)",
+     "legendFormat": "{{destination}} {{status}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 50,
+   "type": "timeseries",
+   "title": "Unmatched observations after join timeout",
+   "description": "kong_without_runner: gateway saw a signed test request the runner never reported. runner_without_kong: http-log batch lost/late (worker-local queue, not durable).",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 85,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "go-prom"
+     },
+     "expr": "sum by (side) (go_unmatched_observations)",
+     "legendFormat": "{{side}}",
+     "instant": false
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "stacking": {
+       "mode": "none"
+      },
+      "fillOpacity": 0
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 51,
+   "type": "row",
+   "title": "Case drill-down",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 93,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 52,
+   "type": "table",
+   "title": "Case drill-down (adjudications, newest revision first) - expected vs verdict vs delivery",
+   "description": "Loki keeps every revision; filter by run_id and take the highest revision per case. Click a row's request_id to pivot into kong_observation events.",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 94,
+    "w": 24,
+    "h": 12
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "{service_name=\"guardrail-evaluator\", environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", stage=~\"$stage\", category=~\"$category\", event_type=\"adjudication\"} | json case_id=\"case_id\", trial=\"trial\", expected=\"expected.action\", violation=\"expected.violation\", verdict=\"verdict.value\", detector=\"detector.outcome\", enforcement=\"enforcement.outcome\", delivery=\"delivery.outcome\", policy=\"policy.outcome\", client_status=\"client.status\", request_id=\"request_id\", run_id=\"run_id\", revision=\"adjudication_revision\" | line_format \"{{.case_id}}\"",
+     "datasource": {
+      "type": "loki",
+      "uid": "go-loki"
+     },
+     "queryType": "range",
+     "maxLines": 500
+    }
+   ],
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "source": "labels",
+      "replace": false
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Line": true,
+       "labels": true,
+       "id": true,
+       "tsNs": true,
+       "Time": false
+      },
+      "indexByName": {
+       "Time": 0,
+       "run_id": 1,
+       "revision": 2,
+       "case_id": 3,
+       "trial": 4,
+       "guardrail": 5,
+       "stage": 6,
+       "expected": 7,
+       "violation": 8,
+       "verdict": 9,
+       "detector": 10,
+       "enforcement": 11,
+       "delivery": 12,
+       "policy": 13,
+       "client_status": 14,
+       "request_id": 15
+      }
+     }
+    }
+   ],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": 53,
+   "type": "logs",
+   "title": "Adjudication events (full evidence JSON)",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 106,
+    "w": 24,
+    "h": 10
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "{service_name=\"guardrail-evaluator\", environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", stage=~\"$stage\", category=~\"$category\", event_type=\"adjudication\"}",
+     "datasource": {
+      "type": "loki",
+      "uid": "go-loki"
+     }
+    }
+   ],
+   "options": {
+    "showTime": true,
+    "wrapLogMessage": true,
+    "prettifyLogMessage": true,
+    "enableLogDetails": true,
+    "sortOrder": "Descending"
+   }
+  },
+  {
+   "id": 54,
+   "type": "logs",
+   "title": "Kong observations (phase trace, exit attribution, stream timeline)",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 116,
+    "w": 24,
+    "h": 10
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "{service_name=\"guardrail-evaluator\", environment=~\"$environment\", route=~\"$route\", guardrail=~\"$guardrail\", stage=~\"$stage\", category=~\"$category\", event_type=\"kong_observation\"} |= \"$request_id\"",
+     "datasource": {
+      "type": "loki",
+      "uid": "go-loki"
+     }
+    }
+   ],
+   "options": {
+    "showTime": true,
+    "wrapLogMessage": true,
+    "prettifyLogMessage": true,
+    "enableLogDetails": true,
+    "sortOrder": "Descending"
+   }
+  }
+ ]
+}

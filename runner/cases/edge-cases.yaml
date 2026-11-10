@@ -1,0 +1,27 @@
+# Edge cases that intentionally break correlation. Run separately; expect exit code 2 (unmatched).
+suite: edge-cases
+route: ai-fixture-route
+path: /ai/fixture
+guardrail: fixture-input-guard
+stage: input
+policy_version: fx-block-v1
+environment: local
+label_source: human
+synthetic: true
+cases:
+  - case_id: edge-unsigned-metadata
+    category: benign
+    expected_action: allow
+    violation: false
+    unsigned: true
+    notes: "Runner metadata without signature -> observer records trusted=false -> never joined -> appears under unmatched."
+    messages: [{role: user, content: "benign. respond:CLEAN"}]
+  - case_id: edge-gzip-output
+    guardrail: fixture-output-guard
+    stage: output
+    category: violation
+    expected_action: block
+    violation: true
+    gzip: true
+    notes: "Client accepts gzip. The fixture strips Accept-Encoding upstream so it still inspects plaintext; the observer records request accept_encoding vs response content_encoding so a guardrail that does NOT do this is visible as an unexplained allow."
+    messages: [{role: user, content: "respond:VIOLATION"}]

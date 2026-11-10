@@ -1,0 +1,1330 @@
+{
+ "uid": "guardrail-live",
+ "title": "Guardrail chain - live traffic",
+ "tags": [
+  "kong",
+  "guardrail",
+  "ai",
+  "live"
+ ],
+ "timezone": "browser",
+ "schemaVersion": 39,
+ "version": 1,
+ "editable": true,
+ "refresh": "10s",
+ "time": {
+  "from": "now-20m",
+  "to": "now"
+ },
+ "templating": {
+  "list": [
+   {
+    "name": "route",
+    "label": "Route",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "go-prom"
+    },
+    "query": {
+     "query": "label_values(go_live_requests, route)",
+     "refId": "v"
+    },
+    "definition": "label_values(go_live_requests, route)",
+    "includeAll": true,
+    "multi": true,
+    "refresh": 2,
+    "sort": 1,
+    "allValue": ".*",
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    }
+   },
+   {
+    "name": "guardrail",
+    "label": "Guardrail",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "go-prom"
+    },
+    "query": {
+     "query": "label_values(go_live_guardrail_reached, guardrail)",
+     "refId": "v"
+    },
+    "definition": "label_values(go_live_guardrail_reached, guardrail)",
+    "includeAll": true,
+    "multi": true,
+    "refresh": 2,
+    "sort": 1,
+    "allValue": ".*",
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    }
+   }
+  ]
+ },
+ "panels": [
+  {
+   "id": 1,
+   "type": "text",
+   "title": "",
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 2
+   },
+   "options": {
+    "mode": "markdown",
+    "content": "**Signals, not verdicts.** Ordinary traffic carries no labels, so nothing here proves a guardrail right or wrong: each number is a place to look. Values are recomputed over the evaluator's sliding window (`PASSIVE_WINDOW_S`). Evidence behind every number: evaluator `/passive/summary`. The same chain drawn in 3D: evaluator `/chain`."
+   },
+   "transparent": true
+  },
+  {
+   "id": 2,
+   "type": "stat",
+   "title": "Requests in window",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 2,
+    "w": 3,
+    "h": 4
+   },
+   "targets": [
+    {
+     "expr": "sum(go_live_requests{route=~\"$route\"})",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value"
+   }
+  },
+  {
+   "id": 3,
+   "type": "stat",
+   "title": "Stopped in the gateway",
+   "description": "Share of requests that ended inside Kong, whichever plugin ended them.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 3,
+    "y": 2,
+    "w": 3,
+    "h": 4
+   },
+   "targets": [
+    {
+     "expr": "sum(go_live_route_blocked{route=~\"$route\"}) / sum(go_live_requests{route=~\"$route\"})",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.2
+       },
+       {
+        "color": "red",
+        "value": 0.4
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value"
+   }
+  },
+  {
+   "id": 4,
+   "type": "stat",
+   "title": "Signals to check",
+   "description": "Signals marked warn. Kinds are listed under Signals below.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 6,
+    "y": 2,
+    "w": 3,
+    "h": 4
+   },
+   "targets": [
+    {
+     "expr": "sum(go_live_signals{severity=\"warn\"})",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value"
+   }
+  },
+  {
+   "id": 5,
+   "type": "stat",
+   "title": "Coverage findings",
+   "description": "AI routes with no guardrail, a disabled guardrail, a guardrail that peer routes have, or no probes.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 9,
+    "y": 2,
+    "w": 3,
+    "h": 4
+   },
+   "targets": [
+    {
+     "expr": "sum(go_live_coverage_findings{route=~\"$route\"})",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value"
+   }
+  },
+  {
+   "id": 6,
+   "type": "stat",
+   "title": "Suspected fail-open",
+   "description": "Allowed after about the guardrail's timeout with no decision recorded.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 2,
+    "w": 3,
+    "h": 4
+   },
+   "targets": [
+    {
+     "expr": "sum(go_live_guardrail_fail_open_suspects{guardrail=~\"$guardrail\", guardrail!=\"header-guardrail\"})",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value"
+   }
+  },
+  {
+   "id": 7,
+   "type": "stat",
+   "title": "Ran without a decision",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 15,
+    "y": 2,
+    "w": 3,
+    "h": 4
+   },
+   "targets": [
+    {
+     "expr": "sum(go_live_guardrail_no_verdict{guardrail=~\"$guardrail\", guardrail!=\"header-guardrail\"})",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value"
+   }
+  },
+  {
+   "id": 8,
+   "type": "stat",
+   "title": "Flagged but served",
+   "description": "Expected in detect-only mode; a slip if the guardrail is meant to block.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 18,
+    "y": 2,
+    "w": 3,
+    "h": 4
+   },
+   "targets": [
+    {
+     "expr": "sum(go_live_guardrail_detected_not_enforced{guardrail=~\"$guardrail\", guardrail!=\"header-guardrail\"})",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value"
+   }
+  },
+  {
+   "id": 9,
+   "type": "stat",
+   "title": "Chain share of gateway time",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 21,
+    "y": 2,
+    "w": 3,
+    "h": 4
+   },
+   "targets": [
+    {
+     "expr": "max(go_live_chain_share{route=~\"$route\"})",
+     "refId": "A",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.3
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value"
+   }
+  },
+  {
+   "id": 10,
+   "type": "row",
+   "title": "Each guardrail, now",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 6,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 11,
+   "type": "bargauge",
+   "title": "Stopped or altered, share of requests that reached it",
+   "description": "(blocked + altered) / reached. High could be an attack wave or overcatching: sample the affected requests.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 7,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "go_live_guardrail_block_rate{guardrail=~\"$guardrail\", guardrail!=\"header-guardrail\"}",
+     "refId": "A",
+     "instant": true,
+     "legendFormat": "{{guardrail}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.2
+       },
+       {
+        "color": "red",
+        "value": 0.4
+       }
+      ]
+     },
+     "max": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "basic",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "showUnfilled": true,
+    "valueMode": "color",
+    "namePlacement": "left"
+   }
+  },
+  {
+   "id": 12,
+   "type": "bargauge",
+   "title": "Time spent in the guardrail, p95",
+   "description": "Time between the probes on either side. Missing when two guardrails share a gap (leave a free priority between them).",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 7,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "go_live_guardrail_latency_ms{guardrail=~\"$guardrail\", guardrail!=\"header-guardrail\", quantile=\"p95\"}",
+     "refId": "A",
+     "instant": true,
+     "legendFormat": "{{guardrail}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "min": 0,
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 100
+       },
+       {
+        "color": "red",
+        "value": 300
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "basic",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "showUnfilled": true,
+    "valueMode": "color",
+    "namePlacement": "left"
+   }
+  },
+  {
+   "id": 13,
+   "type": "bargauge",
+   "title": "Requests that reached it",
+   "description": "A guardrail later in the chain sees fewer requests: the earlier ones already stopped some.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 7,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "go_live_guardrail_reached{guardrail=~\"$guardrail\", guardrail!=\"header-guardrail\"}",
+     "refId": "A",
+     "instant": true,
+     "legendFormat": "{{guardrail}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0,
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "basic",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "showUnfilled": true,
+    "valueMode": "color",
+    "namePlacement": "left"
+   }
+  },
+  {
+   "id": 14,
+   "type": "row",
+   "title": "Over time",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 14,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 15,
+   "type": "timeseries",
+   "title": "Stopped or altered, per guardrail",
+   "description": "A step up here with no config change is traffic changing; a step right after a config change is the config.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 15,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "go_live_guardrail_block_rate{guardrail=~\"$guardrail\", guardrail!=\"header-guardrail\"}",
+     "legendFormat": "{{guardrail}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      },
+      "drawStyle": "line"
+     },
+     "min": 0,
+     "max": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 16,
+   "type": "timeseries",
+   "title": "Time spent in each guardrail, p50 and p95",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 15,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "go_live_guardrail_latency_ms{guardrail=~\"$guardrail\", guardrail!=\"header-guardrail\", quantile=\"p95\"}",
+     "legendFormat": "p95 {{guardrail}}",
+     "refId": "A"
+    },
+    {
+     "expr": "go_live_guardrail_latency_ms{guardrail=~\"$guardrail\", guardrail!=\"header-guardrail\", quantile=\"p50\"}",
+     "legendFormat": "p50 {{guardrail}}",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      },
+      "drawStyle": "line"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 17,
+   "type": "timeseries",
+   "title": "Suspected fail-open and silent runs",
+   "description": "A guardrail whose backend times out and lets requests through shows here and nowhere in its own logs.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 23,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "go_live_guardrail_fail_open_suspects{guardrail=~\"$guardrail\", guardrail!=\"header-guardrail\"}",
+     "legendFormat": "fail-open? {{guardrail}}",
+     "refId": "A"
+    },
+    {
+     "expr": "go_live_guardrail_no_verdict{guardrail=~\"$guardrail\", guardrail!=\"header-guardrail\"} > 0",
+     "legendFormat": "no decision {{guardrail}}",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      },
+      "drawStyle": "line"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 18,
+   "type": "timeseries",
+   "title": "After a block: what the same caller did next",
+   "description": "Retries that get through: callers rephrasing honest requests (overcatch) or stepping around the block (slip).",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 23,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "sum by (outcome) (go_live_after_block{guardrail=~\"$guardrail\", guardrail!=\"header-guardrail\", outcome=~\"retry_.*\"})",
+     "legendFormat": "{{outcome}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      },
+      "drawStyle": "line"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 19,
+   "type": "timeseries",
+   "title": "Responses and requests rewritten",
+   "description": "Body hash differs between the probes around the guardrail.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 23,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "sum by (guardrail, side) (go_live_guardrail_rewrites{guardrail=~\"$guardrail\", guardrail!=\"header-guardrail\"}) > 0",
+     "legendFormat": "{{guardrail}} {{side}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      },
+      "drawStyle": "line"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 20,
+   "type": "row",
+   "title": "Routes and coverage",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 31,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 21,
+   "type": "timeseries",
+   "title": "Requests by route (window)",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 32,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "go_live_requests{route=~\"$route\"}",
+     "legendFormat": "{{route}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      },
+      "drawStyle": "line"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 22,
+   "type": "timeseries",
+   "title": "Coverage findings by route",
+   "description": "ai_route_without_guardrail: requests reach a model with no known guardrail on the route.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 32,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "sum by (route, kind) (go_live_coverage_findings{route=~\"$route\"})",
+     "legendFormat": "{{route}}: {{kind}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      },
+      "drawStyle": "line"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 23,
+   "type": "timeseries",
+   "title": "Kong responses by status (Kong's own counter)",
+   "description": "From Kong's prometheus plugin. A status code alone never says which plugin produced it.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 32,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "sum by (code) (rate(kong_http_requests_total{route=~\"ai-chain.*\"}[1m]))",
+     "legendFormat": "{{code}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "reqps",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 25,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "normal"
+      },
+      "drawStyle": "line"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 24,
+   "type": "row",
+   "title": "Signals and findings",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 40,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 25,
+   "type": "timeseries",
+   "title": "Signals by kind",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 41,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "sum by (kind, severity) (go_live_signals)",
+     "legendFormat": "{{severity}} \u00b7 {{kind}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 25,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "normal"
+      },
+      "drawStyle": "bars"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 26,
+   "type": "timeseries",
+   "title": "Tokens and streaming",
+   "description": "",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "go-prom"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 41,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "go_live_tokens{type=\"total_tokens\"}",
+     "legendFormat": "tokens in window",
+     "refId": "A"
+    },
+    {
+     "expr": "go_live_traffic{fact=\"streamed\"}",
+     "legendFormat": "streamed requests",
+     "refId": "B"
+    },
+    {
+     "expr": "go_live_time_to_first_chunk_ms{quantile=\"p95\"}",
+     "legendFormat": "time to first chunk p95 (ms)",
+     "refId": "C"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      },
+      "drawStyle": "line"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 27,
+   "type": "logs",
+   "title": "Findings in plain language (POST /passive/translate)",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 49,
+    "w": 24,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "{service_name=\"guardrail-evaluator\", event_type=\"findings\"}",
+     "refId": "A"
+    }
+   ],
+   "options": {
+    "showTime": true,
+    "wrapLogMessage": true,
+    "prettifyLogMessage": true,
+    "enableLogDetails": true,
+    "sortOrder": "Descending"
+   }
+  }
+ ]
+}

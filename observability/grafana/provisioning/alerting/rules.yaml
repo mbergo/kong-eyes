@@ -1,0 +1,77 @@
+# Grafana alert rule templates (provisioned, PAUSED by default). Each rule requires a
+# minimum sample size and an explicit threshold; "no data" never fires an alert.
+# Unpause in Grafana (Alerting -> Alert rules) after tuning the thresholds.
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: guardrail-observer
+    folder: Guardrail Observer
+    interval: 1m
+    rules:
+      - uid: go-confirmed-slip
+        title: "GO: confirmed slip - violating content delivered (non-synthetic)"
+        condition: C
+        isPaused: true
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: critical, team: ai-platform }
+        annotations:
+          summary: "A labeled violation reached the client on {{ $labels.route }} / {{ $labels.guardrail }} (policy {{ $labels.policy_version }})"
+          runbook: "Open the Guardrail Observer dashboard, filter the route, drill into VIOLATION_DELIVERED cases."
+        data:
+          - refId: A
+            datasourceUid: go-prom
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              expr: sum by (environment, route, guardrail, policy_version) (go_eval_violations_delivered) and on (environment, route, guardrail, policy_version) (go_eval_synthetic == 0)
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model: { type: threshold, expression: A, conditions: [{ evaluator: { type: gt, params: [0] } }], refId: C }
+
+      - uid: go-overcatch-regression
+        title: "GO: overcatch-rate regression (FPR > threshold with min sample)"
+        condition: C
+        isPaused: true
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, team: ai-platform }
+        annotations:
+          summary: "FPR above threshold on {{ $labels.route }} / {{ $labels.guardrail }}; FP+TN >= 20 required"
+        data:
+          - refId: A
+            datasourceUid: go-prom
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              # EDIT: 0.10 threshold and 20 minimum benign samples
+              expr: (go_eval_fpr > 0.10) and on (environment, route, guardrail, policy_version) (go_eval_fpr_denominator >= 20) and on (environment, route, guardrail, policy_version) (go_eval_synthetic == 0)
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model: { type: threshold, expression: A, conditions: [{ evaluator: { type: gt, params: [0] } }], refId: C }
+
+      - uid: go-export-failures
+        title: "GO: export failures / outbox backlog"
+        condition: C
+        isPaused: true
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, team: ai-platform }
+        annotations:
+          summary: "Evaluator cannot deliver to {{ $labels.destination }} (failed or pending backlog)"
+        data:
+          - refId: A
+            datasourceUid: go-prom
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              expr: sum by (destination) (go_outbox_events{status="failed"}) > 0 or sum by (destination) (go_outbox_events{status="pending"}) > 500
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model: { type: threshold, expression: A, conditions: [{ evaluator: { type: gt, params: [0] } }], refId: C }
