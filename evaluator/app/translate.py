@@ -167,7 +167,15 @@ def translate(summary: dict, provider: Optional[str] = None, call: Optional[Call
             "model": os.environ.get("BEDROCK_MODEL_ID") if name == "bedrock" else
                      os.environ.get("TRANSLATE_MODEL", "claude-sonnet-5-5") if name == "anthropic" else None}
     try:
-        out = parse_findings((call or PROVIDERS[name])(payload))
+        fn = call or PROVIDERS[name]
+        try:
+            out = parse_findings(fn(payload))
+        except (ValueError, json.JSONDecodeError):
+            # a model occasionally returns JSON that does not parse (seen live: an unescaped quote); ask once more
+            if name == "stub":
+                raise
+            out = parse_findings(fn(payload))
+            meta["retried"] = True
     except Exception as e:  # noqa: BLE001
         out = parse_findings(stub_provider(payload))
         meta["error"] = f"{name}: {e}"[:400]

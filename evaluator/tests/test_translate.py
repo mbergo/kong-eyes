@@ -42,3 +42,18 @@ def test_provider_failure_falls_back_to_offline_translation():
 def test_no_signals_gives_empty_findings():
     out = translate.translate(passive.summarize([obs(t=1)]), provider="stub")
     assert out["findings"] == [] and "No signals" in out["headline"]
+
+
+def test_unparseable_reply_is_retried_once_then_falls_back():
+    from app import translate as tr
+    calls = {"n": 0}
+
+    def flaky(payload):
+        calls["n"] += 1
+        return "{not json" if calls["n"] == 1 else '{"headline": "ok", "findings": []}'
+
+    out = tr.translate({"signals": [], "guardrails": {}, "routes": {}, "window": {}}, provider="anthropic", call=flaky)
+    assert calls["n"] == 2 and out["headline"] == "ok" and out["provider"] == "anthropic" and out.get("retried") is True
+
+    out = tr.translate({"signals": [], "guardrails": {}, "routes": {}, "window": {}}, provider="anthropic", call=lambda p: "{still not json")
+    assert out["provider"] == "stub (fallback)" and "error" in out
