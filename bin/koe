@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# koe: the Kong Eyes CLI, run straight from a checkout (no install needed; Python 3.10+).
+here="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+PYTHONPATH="$here/cli${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m kong_eyes "$@"

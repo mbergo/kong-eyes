@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 DESTINATION ?= grafana
 SUITES ?= prompt-guard fixture fixture-detect fixture-leak short-circuit
-.PHONY: up down logs run-suites run-chain agreement perf-probes run-kimi doctor smoke test-unit perf clean dashboard
+.PHONY: up down logs run-suites run-chain agreement perf-probes run-kimi doctor smoke test-unit perf clean dashboard test-integration
 
 up:            ## setup + start (DESTINATION=grafana|splunk|both; add STUB=1 for a local HEC stub)
 	scripts/setup.sh --destination $(DESTINATION) $(if $(STUB),--with-splunk-stub,)
@@ -33,3 +33,6 @@ perf:
 	scripts/perf.sh
 dashboard:
 	python3 observability/grafana/build_dashboard.py
+
+test-integration:   ## needs the stack up; KE_ENV_FILE points at its .env (default ./.env)
+	python3 -m pytest -q tests/integration
