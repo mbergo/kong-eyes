@@ -68,6 +68,8 @@ var $ = function (id) { return document.getElementById(id); };
 var stage = $("stage"), canvas = $("c"), ctx = canvas.getContext("2d"), labelsEl = $("labels");
 var col = {}, W = 1, H = 1, cam = {}, view = { theta: -0.3, phi: 1.0, dist: 46, tx: 0, ty: 1.6, tz: 0 };
 var data = null, route = null, boxes = [], labels = [];
+// ?window_s=60&poll_s=2 makes the numbers follow the traffic closely (for demos); the defaults suit monitoring
+var QS = new URLSearchParams(location.search), WINDOW_S = Math.max(10, +QS.get("window_s") || 900), POLL_S = Math.max(1, +QS.get("poll_s") || 10);
 // one colour per guardrail, used for its box outline, its label and its table row; colour is never a fill
 var flow = { req: 0, gs: [] }, STILL = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 var PAL = ["#3b82f6", "#d946ef", "#f59e0b", "#10b981", "#06b6d4", "#84cc16"], gcol = {};
@@ -159,7 +161,8 @@ function events(t) {
   if (STILL) return;
   var now = performance.now() / 1000, dt = Math.min(0.1, now - (lastT || now)); lastT = now;
   var speed = (2 * t) / 5.5;                                   // a request crosses the whole chain in about 5.5 s
-  if (flow.req && now - lastSpawn > 0.28 && dots.length < 60) { lastSpawn = now; spawn(t); }
+  var gap = Math.max(0.05, Math.min(0.5, 0.9 / Math.sqrt(1 + flow.req / WINDOW_S)));       // seconds between dots, from requests per second
+  if (flow.req && now - lastSpawn > gap && dots.length < 160) { lastSpawn = now; spawn(t); }
   dots = dots.filter(function (d) {
     if (d.state === "go") {
       var nx = d.x + speed * dt;
@@ -194,7 +197,7 @@ function rail() {
   names.sort().forEach(function (n) { var b = document.createElement("button"); b.textContent = n + " (" + data.routes[n].requests + ")"; b.setAttribute("aria-pressed", n === route ? "true" : "false");
     b.addEventListener("click", function () { route = n; rail(); build(); }); rb.appendChild(b); });
   if (!names.length) rb.textContent = "No AI traffic in the window yet.";
-  $("win").textContent = data.window.requests + " request(s) in the last " + Math.round(data.window.seconds / 60) + " min";
+  $("win").textContent = data.window.requests + " request(s) in the last " + (data.window.seconds < 120 ? Math.round(data.window.seconds) + " s" : Math.round(data.window.seconds / 60) + " min");
   var tbl = $("tbl"); tbl.innerHTML = "<tr><th>guardrail</th><th>reached</th><th>stopped</th><th>altered</th><th>p95 ms</th><th>fail-open?</th></tr>";
   var r = route && data.routes[route]; paint();
   (r ? r.guardrails_enabled : []).forEach(function (n) { var g = data.guardrails[n]; if (!g) return; var tr = document.createElement("tr");
@@ -207,7 +210,7 @@ function rail() {
   if (!sg.children.length) sg.textContent = "Nothing flagged in this window.";
 }
 function load() {
-  var q = "passive/summary?window_s=900" + ($("runs").checked ? "&include_runs=true" : "");
+  var q = "passive/summary?window_s=" + WINDOW_S + ($("runs").checked ? "&include_runs=true" : "");
   fetch(q).then(function (r) { return r.json(); }).then(function (d) { data = d; rail(); build(); }).catch(function (e) { $("sub").textContent = "Could not load /passive/summary: " + e.message; });
   fetch("passive/findings").then(function (r) { return r.json(); }).then(function (f) { if (f && f.headline) { $("headline").textContent = f.headline;
     $("prov").textContent = "translator: " + f.provider + (f.model ? " (" + f.model + ")" : "") + " · " + new Date(f.generated_at_ms).toLocaleString(); } }).catch(function () {});
@@ -221,7 +224,7 @@ canvas.addEventListener("pointermove", function (e) { if (!drag) return; view.th
 canvas.addEventListener("pointerup", function () { drag = null; }); canvas.addEventListener("pointercancel", function () { drag = null; });
 canvas.addEventListener("wheel", function (e) { e.preventDefault(); view.dist = Math.max(14, Math.min(160, view.dist * (1 + (e.deltaY > 0 ? 1 : -1) * 0.08))); }, { passive: false });
 $("runs").addEventListener("change", load);
-load(); setInterval(load, 10000); requestAnimationFrame(draw);
+load(); setInterval(load, POLL_S * 1000); requestAnimationFrame(draw);
 })();
 </script>
 </body>

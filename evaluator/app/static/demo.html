@@ -75,7 +75,7 @@ button:disabled { opacity: .5; cursor: default; }
 var $ = function (id) { return document.getElementById(id); };
 var PAL = ["#3b82f6", "#d946ef", "#f59e0b", "#10b981", "#06b6d4", "#84cc16"];   // same order as the chain view
 var theme = new URLSearchParams(location.search).get("theme");
-$("chain").src = "chain" + (theme ? "?theme=" + encodeURIComponent(theme) : "");
+$("chain").src = "chain?window_s=60&poll_s=2" + (theme ? "&theme=" + encodeURIComponent(theme) : "");   // a short window so changes show within seconds
 var state = null, order = [], busy = false;
 function say(text, cls) { var m = $("msg"); m.textContent = text || ""; m.className = cls || ""; }
 function api(method, path, body) {
@@ -136,7 +136,7 @@ function render(full) {
   var g = $("grafana"); if (state.grafana_url) { g.hidden = false; g.href = state.grafana_url.replace(/\/$/, "") + "/d/guardrail-live"; }
 }
 function refresh(full) {
-  return Promise.all([api("GET", "demo/state"), fetch("passive/summary?window_s=900").then(function (r) { return r.json(); }).catch(function () { return null; })])
+  return Promise.all([api("GET", "demo/state"), fetch("passive/summary?window_s=60").then(function (r) { return r.json(); }).catch(function () { return null; })])
     .then(function (res) { state = res[0]; var r = res[1] && res[1].routes && res[1].routes[state.route];
       if (r) order = r.chain.filter(function (c) { return c.kind === "guardrail" || c.kind === "candidate"; }).map(function (c) { return c.name; });
       render(full); })

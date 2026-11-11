@@ -3,6 +3,7 @@
   koe connect    --route NAME --ingest-url URL [--guardrail NAME] [--timeout-ms N] [--yes]
   koe disconnect --route NAME [--yes]
   koe status
+  koe demo traffic --kong-url URL --apikey KEY [--rps 60] [--minutes 10]
 
 Kong's Admin API address comes from --admin-url or KONG_ADMIN_URL; its token, if it needs one, from
 --admin-token or KONG_ADMIN_TOKEN. The collector token comes from --ingest-token or KONG_EYES_INGEST_TOKEN.
@@ -13,7 +14,7 @@ import argparse
 import os
 import sys
 
-from . import __version__, connect as C
+from . import __version__, connect as C, demo as D
 
 
 def _kong(a) -> C.Kong:
@@ -115,6 +116,21 @@ def main(argv=None) -> int:
     s = sub.add_parser("status", help="which routes are being watched")
     common(s)
     s.set_defaults(fn=cmd_status)
+
+    dm = sub.add_parser("demo", help="drive the demo stack").add_subparsers(dest="demo_cmd", required=True)
+    t = dm.add_parser("traffic", help="send a lot of synthetic requests through Kong, fast, with a mix that keeps changing",
+                      description=D.__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    t.add_argument("--kong-url", default=os.environ.get("KONG_PROXY_URL", "http://localhost:8000"), help="Kong's proxy address")
+    t.add_argument("--path", default="/ai/named", help="the demo route")
+    t.add_argument("--apikey", default=os.environ.get("KOE_APIKEY"), required=not os.environ.get("KOE_APIKEY"))
+    t.add_argument("--attacker-apikey", default="untrusted-client-key", help="a second caller, used for the attacks")
+    t.add_argument("--rps", type=float, default=60)
+    t.add_argument("--minutes", type=float, default=10)
+    t.add_argument("--calm", action="store_true", help="one steady mix instead of the storm")
+    t.add_argument("--model", default="mock-gpt")
+    t.add_argument("--workers", type=int, default=48)
+    t.add_argument("--report-s", type=float, default=5)
+    t.set_defaults(fn=D.traffic)
 
     a = ap.parse_args(argv)
     return a.fn(a)
