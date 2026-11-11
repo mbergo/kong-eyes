@@ -125,8 +125,9 @@ Set `DEMO_CONSOLE=true` in `.env`, restart the evaluator, and open `http://local
 page for demos only: sliders for each stand-in (how much it lets slip, how much it overcatches, whether it fails
 open and its timeout), start/stop and mix of the mock traffic, an attack wave on demand, the prompt-capture
 switch and a button to refresh the findings, with the live chain beside it. Changes are applied through Kong's
-Admin API to the stand-ins on `/ai/named` only, and are gone when Kong restarts. It has no login and is not
-routed by the HTTPS front door; never enable it on an evaluator that can reach a real gateway's Admin API.
+Admin API to the stand-ins on `/ai/named` only, and are gone when Kong restarts. It has no login of its own: keep
+it on localhost, or use the HTTPS install (`deploy/install.sh --https --demo-guards "onyx straiker"`), which serves it at
+`/eyes/demo` behind the Grafana login. Never enable it on an evaluator that can reach a real gateway's Admin API.
 
 In the chain view every guardrail has its own colour, used for its outline, its label and its table row.
 Colour is never a fill.

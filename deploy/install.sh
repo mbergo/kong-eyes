@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-command install on a fresh Linux host (written for Ubuntu 24.04, 2 vCPU / 2 GB).
 #
-#   deploy/install.sh [--https [--domain NAME]] [--bind 127.0.0.1|0.0.0.0]
+#   deploy/install.sh [--https [--domain NAME]] [--bind 127.0.0.1|0.0.0.0] [--demo-guards "NAME NAME"]
 #                     [--destination grafana|splunk|both] [--swap-gb N] [--mock-minutes N]
 #                     [--no-docker-install]
 #
@@ -15,13 +15,15 @@
 #      embeds the 3D chain view in the dashboard. Without --domain it uses <public-ip>.sslip.io
 #   6. runs scripts/setup.sh (secrets, config validation, build, start, smoke, doctor)
 #   7. optionally starts synthetic traffic (--mock-minutes)
+#   --demo-guards "a b": also generates stand-in guardrails with those names on /ai/named, turns on the demo
+#      console (/demo, or https://<domain>/eyes/demo behind the Grafana login) and starts its traffic
 #
 # Idempotent: re-run it after pulling a new version. Nothing here touches your own Kong;
 # to attach the probes to an existing gateway use scripts/attach-to-kong.sh.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-BIND="127.0.0.1"; DEST="grafana"; SWAP_GB=2; MOCK_MIN=0; INSTALL_DOCKER=1; HTTPS=0; DOMAIN=""
+BIND="127.0.0.1"; DEST="grafana"; SWAP_GB=2; MOCK_MIN=0; INSTALL_DOCKER=1; HTTPS=0; DOMAIN=""; GUARDS=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --bind) BIND="$2"; shift 2;;
@@ -29,9 +31,10 @@ while [[ $# -gt 0 ]]; do
     --swap-gb) SWAP_GB="$2"; shift 2;;
     --mock-minutes) MOCK_MIN="$2"; shift 2;;
     --https) HTTPS=1; shift;;
+    --demo-guards) GUARDS="$2"; shift 2;;
     --domain) DOMAIN="$2"; HTTPS=1; shift 2;;
     --no-docker-install) INSTALL_DOCKER=0; shift;;
-    -h|--help) sed -n '2,21p' "$0"; exit 0;;
+    -h|--help) sed -n '2,23p' "$0"; exit 0;;
     *) echo "unknown arg $1" >&2; exit 2;;
   esac
 done
@@ -80,7 +83,13 @@ fi
 # the bundled demo routes carry synthetic prompts only, so the dashboard may list them
 [[ -n "$(getenv EXPORT_PROMPT_CHARS)" ]] || setenv EXPORT_PROMPT_CHARS 240
 
-GF_EXTRA=""; CADDY=""; CADDY_VOL=""
+GF_EXTRA=""; CADDY=""; CADDY_VOL=""; EV_EXTRA=""
+if [[ -n "$GUARDS" ]]; then
+  say "Generating stand-in guardrails: $GUARDS"
+  # shellcheck disable=SC2086
+  scripts/gen-demo-guards.sh $GUARDS | head -1
+  setenv DEMO_CONSOLE true
+fi
 if [[ $HTTPS -eq 1 ]]; then
   [[ "$DEST" != "splunk" ]] || { echo "--https serves Grafana: use --destination grafana or both" >&2; exit 2; }
   if [[ -z "$DOMAIN" ]]; then
@@ -106,6 +115,8 @@ if [[ $HTTPS -eq 1 ]]; then
       - caddy-data:/data
     depends_on: [grafana, evaluator, kong]"
   CADDY_VOL="  caddy-data: {}"
+  EV_EXTRA="    environment:
+      DEMO_GRAFANA_URL: https://${DOMAIN}"
   say "HTTPS on https://${DOMAIN} (certificate issued automatically by Caddy)"
   python3 observability/grafana/build_live_dashboard.py --embed-chain '/eyes/chain?theme=dark'
 fi
@@ -120,6 +131,7 @@ services:
       - "127.0.0.1:\${KONG_ADMIN_PORT:-8001}:8001"
       - "127.0.0.1:\${KONG_STATUS_PORT:-8100}:8100"
   evaluator:
+${EV_EXTRA}
     ports: !override
       - "${BIND}:\${EVALUATOR_PORT:-8800}:8000"
   alloy:
@@ -155,12 +167,22 @@ if [[ $MOCK_MIN -gt 0 ]]; then
   (setsid nohup python3 scripts/mock-flow.py --minutes "$MOCK_MIN" >/tmp/gro-mock-flow.log 2>&1 &)
 fi
 
+if [[ -n "$GUARDS" ]]; then
+  say "Starting the demo console's traffic"
+  set -a; . ./.env; set +a
+  for _ in $(seq 1 20); do
+    curl -fsS -m 10 -X POST -H "Content-Type: application/json" -d '{"running":true,"rps":4}' \
+      "http://localhost:${EVALUATOR_PORT:-8800}/demo/traffic" >/dev/null 2>&1 && break; sleep 3
+  done
+fi
+
 set -a; . ./.env; set +a
 echo
 say "Installed"
 if [[ $HTTPS -eq 1 ]]; then
   echo "   Dashboard   https://${DOMAIN}/d/guardrail-live     user ${GRAFANA_ADMIN_USER:-admin}"
   echo "   Password    grep GRAFANA_ADMIN_PASSWORD $(pwd)/.env"
+  [[ -z "$GUARDS" ]] || echo "   Console     https://${DOMAIN}/eyes/demo            log in to Grafana first"
   echo "   Kong (demo) https://${DOMAIN}/kong/ai/chain          target for scripts/kong-load.py --demo"
   echo "   Ingest      https://${DOMAIN}/ingest/kong            EVALUATOR_INGEST_URL for scripts/attach-to-kong.sh"
   echo "   The first page load can take up to a minute while the certificate is issued."

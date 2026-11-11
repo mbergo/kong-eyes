@@ -5,7 +5,8 @@ Off unless DEMO_CONSOLE=true. It is for the bundled demo stack only:
     touches plugins on DEMO_ROUTE that are stand-ins (their config has the fixture's `miss_rate` field) plus that
     route's observer; nothing else in the gateway is edited;
   * changes live in Kong's memory: restarting Kong returns to what the declarative file says;
-  * it has no login of its own. Keep it on localhost. It is not routed by deploy/Caddyfile.
+  * it has no login of its own. Keep it on localhost, or behind a login: deploy/Caddyfile serves it at
+    /eyes/demo only to a browser already logged in to Grafana.
 Never enable it on an evaluator that can reach a real gateway's Admin API.
 """
 from __future__ import annotations

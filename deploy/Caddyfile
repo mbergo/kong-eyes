@@ -5,6 +5,8 @@
 #   /            Grafana (its own login)
 #   /eyes/*      read-only evaluator pages for the dashboard (chain view, summary, findings);
 #                only served to a browser that is already logged in to Grafana
+#   /eyes/demo   the demo console, behind the same Grafana login. It answers only when the evaluator runs
+#                with DEMO_CONSOLE=true (deploy/install.sh --demo-guards); otherwise 404
 #   /ingest/*    where a Kong gateway posts its events (protected by the evaluator's ingest token)
 #   /kong/*      the demo Kong proxy on this host (key-auth), a target for scripts/kong-load.py
 {$EYES_DOMAIN} {
@@ -24,6 +26,8 @@
 				path /chain /passive/summary /passive/findings /passive/signals
 			}
 			reverse_proxy @readonly evaluator:8000
+			@demo path /demo /demo/*
+			reverse_proxy @demo evaluator:8000
 			respond 404
 		}
 	}
