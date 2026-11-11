@@ -49,6 +49,10 @@ Your guardrails are not modified. The probes only read and annotate the request 
 
 `koe` is the Kong Eyes command line (and a Brazilian way of saying hello).
 
+For a demo, `bin/koe demo traffic --kong-url http://localhost:8000 --apikey KEY` sends about 60 requests a second with a mix
+that changes every few seconds (calm, attack burst, disguised attacks, slow backend, recovery). Open the chain with
+`/chain?window_s=60&poll_s=2`, or the demo console, to watch it follow.
+
 ```bash
 bin/koe connect --admin-url http://kong-admin:8001 --route my-ai-route \
     --ingest-url https://<eyes-host>/ingest/kong --ingest-token ... --timeout-ms 400
