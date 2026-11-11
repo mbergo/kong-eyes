@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS kong_observations (
 );
 CREATE INDEX IF NOT EXISTS ix_kobs_unit ON kong_observations(run_id, case_id, trial);
 CREATE INDEX IF NOT EXISTS ix_kobs_req ON kong_observations(request_id);
+-- every live number is a time-window query; without this each one scans the whole table
+CREATE INDEX IF NOT EXISTS ix_kobs_started ON kong_observations(started_at_ms);
 
 CREATE TABLE IF NOT EXISTS runner_observations (
   run_id TEXT NOT NULL, case_id TEXT NOT NULL, trial INTEGER NOT NULL,
@@ -83,6 +85,7 @@ CREATE TABLE IF NOT EXISTS outbox (
   UNIQUE(destination, event_id)
 );
 CREATE INDEX IF NOT EXISTS ix_outbox_due ON outbox(destination, status, next_attempt_at);
+CREATE INDEX IF NOT EXISTS ix_outbox_status_created ON outbox(status, created_at);
 
 CREATE TABLE IF NOT EXISTS findings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -175,6 +178,22 @@ class Store:
         sql += " ORDER BY started_at_ms DESC LIMIT ?"
         params.append(limit)
         return [json.loads(r["payload"]) for r in self.q(sql, params)]
+
+    def prune(self, keep_hours: float, keep_sent_minutes: float = 30) -> dict:
+        """Retention. Ordinary-traffic observations older than keep_hours go; labelled runs are kept (they are the
+        record of a test). Exported outbox rows are copies of events already delivered, so they go after
+        keep_sent_minutes. Freed pages are reused; the file does not shrink without a VACUUM."""
+        now = time.time()
+        with self.tx() as c:
+            a = c.execute("DELETE FROM kong_observations WHERE run_id IS NULL AND started_at_ms < ?",
+                          (int((now - keep_hours * 3600) * 1000),)).rowcount
+            b = c.execute("DELETE FROM outbox WHERE status='sent' AND created_at < ?", (now - keep_sent_minutes * 60,)).rowcount
+            d = c.execute("DELETE FROM ingest_log WHERE received_at < ?", (now - keep_hours * 3600,)).rowcount
+        try:
+            self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except sqlite3.Error:
+            pass
+        return {"observations": a, "outbox_sent": b, "ingest_log": d}
 
     def save_findings(self, doc: dict) -> int:
         with self.tx() as c:

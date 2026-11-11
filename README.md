@@ -206,8 +206,10 @@ Verified on a real Kong 3.10 gateway with synthetic guardrails and a mock model:
 Not verified yet:
 
 - A live Claude call (only the offline stub has run) and the Bedrock path.
-- `scripts/aws-up.sh`, `deploy/install.sh` and `scripts/deploy-remote.sh` on a real host. The pieces were checked locally
-  (Caddy routing and login gate, the generated compose file, the load script, the attach dry run), not end to end.
+- `scripts/aws-up.sh` (creating the instance). `scripts/deploy-remote.sh` and `deploy/install.sh --https --demo-guards` have run
+  end to end on a 2 vCPU / 2 GB Ubuntu 24.04 EC2 host, including a browser-style login to the console.
+- Long runs. The first 12-hour run filled the store and hung the evaluator; an index, retention (`RETENTION_HOURS`) and
+  a traffic auto-stop were added after that. Nothing has run longer than that since.
 - Real guardrails, production traffic volumes, and any Konnect-hosted data plane.
 - Kong versions other than 3.10. The internal adapters are version-gated and degrade to `unknown`.
 

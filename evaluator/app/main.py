@@ -31,6 +31,7 @@ from .store import Store
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 log = logging.getLogger("evaluator")
+logging.getLogger("httpx").setLevel(logging.WARNING)      # one line per outgoing request is noise
 
 DB_PATH = os.environ.get("EVAL_DB_PATH", "/data/evaluator.db")
 INGEST_TOKEN = os.environ.get("INGEST_TOKEN", "")
@@ -409,20 +410,20 @@ def _passive_summary(window_s: float | None, route: str | None, include_runs: bo
 
 
 @app.get("/passive/summary")
-async def passive_summary(window_s: float | None = None, route: str | None = None, include_runs: bool = False):
+def passive_summary(window_s: float | None = None, route: str | None = None, include_runs: bool = False):
     """Everything the checks on ordinary traffic computed for the window: routes, guardrails, coverage, signals."""
     return _passive_summary(window_s, route, include_runs)
 
 
 @app.get("/passive/coverage")
-async def passive_coverage(window_s: float | None = None, include_runs: bool = False):
+def passive_coverage(window_s: float | None = None, include_runs: bool = False):
     s = _passive_summary(window_s, None, include_runs)
     return {"window": s["window"], "coverage": s["coverage"],
             "routes": {k: {x: v[x] for x in ("requests", "ai_route", "guardrails_enabled", "guardrails_disabled", "probes_expected")} for k, v in s["routes"].items()}}
 
 
 @app.get("/passive/guardrails/{name}")
-async def passive_guardrail(name: str, window_s: float | None = None, include_runs: bool = False):
+def passive_guardrail(name: str, window_s: float | None = None, include_runs: bool = False):
     s = _passive_summary(window_s, None, include_runs)
     if name not in s["guardrails"]:
         raise HTTPException(404, f"no traffic seen for guardrail {name} in the window")
@@ -431,7 +432,7 @@ async def passive_guardrail(name: str, window_s: float | None = None, include_ru
 
 
 @app.get("/passive/signals")
-async def passive_signals(window_s: float | None = None, include_runs: bool = False):
+def passive_signals(window_s: float | None = None, include_runs: bool = False):
     s = _passive_summary(window_s, None, include_runs)
     return {"window": s["window"], "signals": s["signals"]}
 
@@ -444,7 +445,7 @@ async def chain_view():
 
 
 @app.get("/passive/agreement")
-async def passive_agreement(window_s: float = 3600):
+def passive_agreement(window_s: float = 3600):
     """Cross-check of the probe trail against Kong's own request-debug trace, on requests that carry both.
     The trace is the reference: any 'disagree' is a bug in the probe trail."""
     since = int((time.time() - window_s) * 1000)
@@ -472,7 +473,8 @@ async def passive_agreement(window_s: float = 3600):
 @app.post("/passive/translate", dependencies=[Depends(require_runner_token)])
 async def passive_translate(window_s: float | None = None, include_runs: bool = False, provider: str | None = None):
     """Ask the configured translator (Claude API, Bedrock, or the offline stub) to put the signals in plain language."""
-    doc = translate.translate(_passive_summary(window_s, None, include_runs), provider=provider)
+    # a model call can take a minute: run it, and the summary behind it, off the event loop
+    doc = await asyncio.to_thread(lambda: translate.translate(_passive_summary(window_s, None, include_runs), provider=provider))
     doc["id"] = store.save_findings(doc)
     ev = {"schema_version": adj.SCHEMA_VERSION, "event_type": "findings", "event_id": f"findings-{doc['id']}-{doc['generated_at_ms']}",
           "ts": doc["generated_at_ms"], "environment": os.environ.get("ENVIRONMENT", "local"), "route": "n/a", "guardrail": "n/a", "stage": "n/a",
@@ -486,6 +488,28 @@ demo.translate_now = passive_translate
 app.include_router(demo.router)
 
 
+RETENTION_HOURS = float(os.environ.get("RETENTION_HOURS", "24") or 24)
+
+
+@app.on_event("startup")
+async def _retention():
+    """Ordinary traffic never stops arriving, so the store is pruned on a timer (RETENTION_HOURS, 0 = keep everything)."""
+    if RETENTION_HOURS <= 0:
+        return
+
+    async def loop():
+        while True:
+            try:
+                n = await asyncio.to_thread(store.prune, RETENTION_HOURS)
+                if any(n.values()):
+                    log.info("retention: pruned %s", n)
+            except Exception as e:  # noqa: BLE001
+                log.warning("retention failed: %s", e)
+            await asyncio.sleep(600)
+
+    asyncio.create_task(loop())
+
+
 @app.on_event("startup")
 async def _auto_translate():
     """TRANSLATE_EVERY_S > 0: refresh the plain-language findings on a timer (skipped while there is no traffic)."""
@@ -497,7 +521,7 @@ async def _auto_translate():
         while True:
             await asyncio.sleep(max(every, 30.0))
             try:
-                if store.observations_since(time.time() * 1000 - 60_000):
+                if await asyncio.to_thread(store.observations_since, int(time.time() * 1000 - 60_000), False, None, 1):
                     await passive_translate()
             except Exception as e:  # never let the timer die
                 logging.getLogger("evaluator").warning("auto translate failed: %s", e)
@@ -517,5 +541,5 @@ async def requeue(destination: str):
 
 
 @app.get("/metrics")
-async def prom():
+def prom():
     return Response(metrics.render(), media_type="text/plain; version=0.0.4")

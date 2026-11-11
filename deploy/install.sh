@@ -80,6 +80,7 @@ if [[ -z "$(getenv GRAFANA_ADMIN_PASSWORD)" ]]; then
   say "Generated a Grafana admin password (stored in .env)"
 fi
 [[ -n "$(getenv TRANSLATE_EVERY_S)" ]] || setenv TRANSLATE_EVERY_S 300
+[[ -n "$(getenv RETENTION_HOURS)" ]] || setenv RETENTION_HOURS 6        # small demo host: keep the store small
 # the bundled demo routes carry synthetic prompts only, so the dashboard may list them
 [[ -n "$(getenv EXPORT_PROMPT_CHARS)" ]] || setenv EXPORT_PROMPT_CHARS 240
 

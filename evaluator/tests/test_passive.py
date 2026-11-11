@@ -156,3 +156,20 @@ def test_every_signal_is_marked_investigate():
     evs = [obs(t=i, status=403, source="exit", blocker="g1") for i in range(25)]
     s = passive.summarize(evs)
     assert s["signals"] and all(x["status"] == "investigate" for x in s["signals"])
+
+
+def test_prune_drops_old_ordinary_traffic_and_keeps_labelled_runs(tmp_path):
+    import time
+    from app.store import Store
+    st = Store(str(tmp_path / "t.db")); now = int(time.time() * 1000)
+    def obs(eid, age_h, run=None):
+        with st.tx() as c:
+            c.execute("INSERT INTO kong_observations(event_id, received_at, run_id, started_at_ms, payload) VALUES (?,?,?,?,?)",
+                      (eid, time.time(), run, now - int(age_h * 3600_000), "{}"))
+    obs("old", 30); obs("new", 1); obs("old-run", 30, run="r1")
+    st.enqueue("otlp", "e1", {"a": 1}); st.mark_sent([st.q1("SELECT id FROM outbox")["id"]])
+    with st.tx() as c:
+        c.execute("UPDATE outbox SET created_at = created_at - 7200")
+    n = st.prune(24)
+    assert n["observations"] == 1 and n["outbox_sent"] == 1
+    assert {r["event_id"] for r in st.q("SELECT event_id FROM kong_observations")} == {"new", "old-run"}

@@ -122,7 +122,7 @@ function traffic() {
   $("wave").disabled = !t.running; $("wave").textContent = t.wave_seconds_left ? "Attack wave, " + t.wave_seconds_left + " s left" : "Attack wave, 60 s";
   ["rps", "violation", "obfuscated", "slow"].forEach(function (k) { if (document.activeElement !== $(k)) $(k).value = t[k]; $(k + "_o").textContent = k === "rps" ? Math.round(t[k]) + "/s" : Math.round(t[k]) + "%"; });
   var st = Object.keys(t.status).sort().map(function (k) { return k + ": " + t.status[k]; }).join("   ");
-  $("tstat").textContent = "sent " + t.sent + (st ? "\n" + st : "") + (t.error ? "\nlast error: " + t.error : "");
+  $("tstat").textContent = "sent " + t.sent + (t.running ? "   stops by itself in " + t.minutes_left + " min" : "") + (st ? "\n" + st : "") + (t.note ? "\n" + t.note : "") + (t.error ? "\nlast error: " + t.error : "");
 }
 function render(full) {
   $("route").textContent = state.route + " (" + state.path + ")";

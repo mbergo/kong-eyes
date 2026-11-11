@@ -27,6 +27,7 @@ ADMIN = os.environ.get("DEMO_KONG_ADMIN_URL", "http://kong:8001").rstrip("/")
 PROXY = os.environ.get("DEMO_KONG_PROXY_URL", "http://kong:8000").rstrip("/")
 ROUTE = os.environ.get("DEMO_ROUTE", "ai-named-route")
 PATH = os.environ.get("DEMO_PATH", "/ai/named")
+MAX_MIN = float(os.environ.get("DEMO_TRAFFIC_MAX_MIN", "30") or 30)   # traffic stops by itself after this long
 
 router = APIRouter()
 translate_now = None          # set by main.py: an async callable that refreshes the plain-language findings
@@ -76,7 +77,7 @@ BENIGN = ["Summarise the attached meeting notes.", "Draft a polite reply to this
           "Translate the paragraph to Portuguese.", "List three risks in this plan.", "Write release notes for the new build.",
           "Rewrite this for a non-technical reader.", "Give three alternatives to a nightly cron job."]
 T = {"running": False, "rps": 4.0, "violation": 6, "obfuscated": 4, "slow": 0, "wave_until": 0.0,
-     "sent": 0, "status": collections.Counter(), "started": 0.0, "error": None}
+     "sent": 0, "status": collections.Counter(), "started": 0.0, "error": None, "note": None}
 _task: asyncio.Task | None = None
 
 
@@ -105,6 +106,9 @@ async def _traffic():
             except Exception as e:  # noqa: BLE001
                 T["status"]["error"] += 1; T["error"] = type(e).__name__
         while T["running"]:
+            if time.time() - T["started"] > MAX_MIN * 60:
+                T.update(running=False, note=f"stopped by itself after {MAX_MIN:g} min; press Start for more")
+                break
             kind, text = _pick()
             who = "untrusted-client" if kind in ("violation", "obfuscated") and random.random() < 0.7 else "runner"
             if retry and random.random() < 0.6:
@@ -116,7 +120,8 @@ async def _traffic():
 def _traffic_view() -> dict:
     return {"running": T["running"], "rps": T["rps"], "violation": T["violation"], "obfuscated": T["obfuscated"], "slow": T["slow"],
             "wave_seconds_left": max(0, int(T["wave_until"] - time.time())), "sent": T["sent"], "status": dict(T["status"]),
-            "error": T["error"]}
+            "error": T["error"], "note": T["note"],
+            "minutes_left": max(0, round(MAX_MIN - (time.time() - T["started"]) / 60)) if T["running"] else 0}
 
 
 # ----------------------------------------------------------------------------- endpoints
@@ -197,7 +202,7 @@ async def demo_traffic(body: dict):
         T["wave_until"] = time.time() + 60
     if "running" in body:
         if body["running"] and not T["running"]:
-            T.update(running=True, started=time.time(), error=None)
+            T.update(running=True, started=time.time(), error=None, note=None)
             _task = asyncio.create_task(_traffic())
         elif not body["running"]:
             T["running"] = False
