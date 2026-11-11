@@ -45,6 +45,31 @@ client ─► Kong route
 
 Your guardrails are not modified. The probes only read and annotate the request context.
 
+## `koe`: connect to any Kong without installing anything
+
+`koe` is the Kong Eyes command line (and a Brazilian way of saying hello).
+
+```bash
+bin/koe connect --admin-url http://kong-admin:8001 --route my-ai-route \
+    --ingest-url https://<eyes-host>/ingest/kong --ingest-token ... --timeout-ms 400
+bin/koe status
+bin/koe disconnect --route my-ai-route
+```
+
+`connect` adds three plugins Kong already ships (pre-function, post-function, http-log) to the route through the
+Admin API. No image rebuild, no custom plugin. It works on DB-backed and DB-less Kong, asks before changing
+anything, and `--dry-run` only reports. For a route with **one** guardrail it gives, per request: served or
+stopped, who stopped it, the time the guardrail took, and whether it waited for its timeout and then let the
+request through.
+
+| | Bundled plugins (`koe connect`) | Probe plugins (`attach-to-kong.sh`) |
+|---|---|---|
+| Install on the gateway | Nothing | Plugin files in the image |
+| Who stopped a request | By elimination: auth passed and the model plugin never ran | By position in the trail |
+| Time in the guardrail | Time of the whole access chain; exact when the guardrail is the one slow plugin | Exact, per guardrail |
+| More than one guardrail | No, they share one bracket | Yes |
+| Needs | `untrusted_lua` not `off` (Kong's default is fine) | Kong 3.10 line |
+
 ## Three scripts
 
 | You want to | Run |
