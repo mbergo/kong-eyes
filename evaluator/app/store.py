@@ -118,6 +118,10 @@ class Store:
         cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(runs)")}
         if "suite" not in cols:
             self._conn.execute("ALTER TABLE runs ADD COLUMN suite TEXT")
+        kcols = {r["name"] for r in self._conn.execute("PRAGMA table_info(kong_observations)")}
+        for col, typ in (("result", "TEXT"), ("duration_ms", "INTEGER"), ("guard_ms", "INTEGER")):
+            if col not in kcols:
+                self._conn.execute(f"ALTER TABLE kong_observations ADD COLUMN {col} {typ}")
 
     @contextmanager
     def tx(self):
@@ -149,19 +153,21 @@ class Store:
         runner = gro.get("runner") or {}
         trusted = 1 if runner.get("trusted") else 0
         route = (gro.get("route") or {}).get("name") or (gro.get("route") or {}).get("id")
+        from .passive import apm_view
+        apm = apm_view(gro)
         with self.tx() as c:
             try:
                 c.execute(
                     """INSERT INTO kong_observations(event_id, received_at, request_id, run_id, case_id, trial,
-                       runner_trusted, environment, route, status, started_at_ms, payload)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       runner_trusted, environment, route, status, started_at_ms, payload, result, duration_ms, guard_ms)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (gro["event_id"], time.time(), gro.get("request_id"),
                      runner.get("run_id") if trusted else None,
                      runner.get("case_id") if trusted else None,
                      runner.get("trial") if trusted else None,
                      trusted, gro.get("environment"), route,
                      (gro.get("response") or {}).get("status"), gro.get("started_at_ms"),
-                     json.dumps(gro, separators=(",", ":"))))
+                     json.dumps(gro, separators=(",", ":")), apm["result"], gro.get("duration_ms"), apm["guard_ms"]))
                 return True
             except sqlite3.IntegrityError:
                 return False

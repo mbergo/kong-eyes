@@ -45,6 +45,13 @@ client ─► Kong route
 
 Your guardrails are not modified. The probes only read and annotate the request context.
 
+## The dashboard
+
+Open `http://localhost:8800/dashboard`. It is one page, served by the collector itself, written for people who have
+never opened Kong: a few sentences saying what happened, a picture of where the requests went, one panel per
+guardrail with what each number means, charts over time, the patterns worth a look, and the requests one by one.
+It needs no Grafana, Loki or Prometheus; those are now optional (`DESTINATION=grafana`).
+
 ## `koe`: connect to any Kong without installing anything
 
 `koe` is the Kong Eyes command line (and a Brazilian way of saying hello).
