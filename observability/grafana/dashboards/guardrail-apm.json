@@ -1,0 +1,1285 @@
+{
+ "uid": "guardrail-apm",
+ "title": "Requests and prompts",
+ "tags": [
+  "kong",
+  "guardrail",
+  "ai",
+  "apm"
+ ],
+ "timezone": "browser",
+ "schemaVersion": 39,
+ "version": 1,
+ "editable": true,
+ "refresh": "10s",
+ "time": {
+  "from": "now-15m",
+  "to": "now"
+ },
+ "links": [
+  {
+   "type": "dashboards",
+   "tags": [
+    "guardrail"
+   ],
+   "asDropdown": false,
+   "title": "Guardrail dashboards",
+   "includeVars": true,
+   "keepTime": true
+  }
+ ],
+ "templating": {
+  "list": [
+   {
+    "name": "route",
+    "label": "Route",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "go-prom"
+    },
+    "query": {
+     "query": "label_values(go_live_requests, route)",
+     "refId": "v"
+    },
+    "definition": "label_values(go_live_requests, route)",
+    "includeAll": true,
+    "multi": true,
+    "refresh": 2,
+    "sort": 1,
+    "allValue": ".*",
+    "current": {
+     "selected": true,
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    }
+   }
+  ]
+ },
+ "panels": [
+  {
+   "id": 1,
+   "type": "text",
+   "title": "",
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 4
+   },
+   "options": {
+    "mode": "markdown",
+    "content": "### Requests, one by one\nEvery line is one request that crossed the gateway: what happened to it, how long each plugin held it, and the start of what was asked. **Served** reached the model. **Stopped by X** ended inside Kong at that plugin. **Waited at X** sat in a guardrail for about its timeout and was then let through, which is what a fail-open looks like. Click a row to filter; open a prompt cell to read it in full."
+   },
+   "transparent": true
+  },
+  {
+   "id": 2,
+   "type": "stat",
+   "title": "Requests per minute",
+   "description": "Requests seen in the last minute on the selected routes.",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "expr": "sum(count_over_time({service_name=\"guardrail-evaluator\"} | event_type=\"kong_observation\" | route=~\"$route\" [1m]))",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#5b9cf5",
+        "value": null
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   }
+  },
+  {
+   "id": 3,
+   "type": "stat",
+   "title": "Served",
+   "description": "Share of requests in the last 5 minutes that reached the model.",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 4,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "expr": "sum(count_over_time({service_name=\"guardrail-evaluator\"} | event_type=\"kong_observation\" | route=~\"$route\" | json src=\"response.source\" | src!=\"exit\" [5m])) / sum(count_over_time({service_name=\"guardrail-evaluator\"} | event_type=\"kong_observation\" | route=~\"$route\" [5m]))",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#e5484d",
+        "value": null
+       },
+       {
+        "color": "#f2a93b",
+        "value": 0.5
+       },
+       {
+        "color": "#3fb68b",
+        "value": 0.8
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   }
+  },
+  {
+   "id": 4,
+   "type": "stat",
+   "title": "Stopped in the gateway",
+   "description": "Share of requests in the last 5 minutes that ended inside Kong.",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "expr": "sum(count_over_time({service_name=\"guardrail-evaluator\"} | event_type=\"kong_observation\" | route=~\"$route\" | json src=\"response.source\" | src=\"exit\" [5m])) / sum(count_over_time({service_name=\"guardrail-evaluator\"} | event_type=\"kong_observation\" | route=~\"$route\" [5m]))",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3fb68b",
+        "value": null
+       },
+       {
+        "color": "#f2a93b",
+        "value": 0.2
+       },
+       {
+        "color": "#e5484d",
+        "value": 0.4
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   }
+  },
+  {
+   "id": 5,
+   "type": "stat",
+   "title": "Gateway time, median",
+   "description": "Median time from the request entering Kong to the response leaving it, last 5 minutes.",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "expr": "quantile_over_time(0.5, {service_name=\"guardrail-evaluator\"} | event_type=\"kong_observation\" | route=~\"$route\" | json ms=\"duration_ms\" | unwrap ms | __error__=\"\" [5m]) by ()",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3fb68b",
+        "value": null
+       },
+       {
+        "color": "#f2a93b",
+        "value": 100
+       },
+       {
+        "color": "#e5484d",
+        "value": 350
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   }
+  },
+  {
+   "id": 6,
+   "type": "stat",
+   "title": "Gateway time, p95",
+   "description": "95 of 100 requests were faster than this, last 5 minutes.",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "expr": "quantile_over_time(0.95, {service_name=\"guardrail-evaluator\"} | event_type=\"kong_observation\" | route=~\"$route\" | json ms=\"duration_ms\" | unwrap ms | __error__=\"\" [5m]) by ()",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3fb68b",
+        "value": null
+       },
+       {
+        "color": "#f2a93b",
+        "value": 200
+       },
+       {
+        "color": "#e5484d",
+        "value": 400
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   }
+  },
+  {
+   "id": 7,
+   "type": "stat",
+   "title": "Waited at a guardrail",
+   "description": "Requests in the last 5 minutes that sat in a guardrail for about its timeout and were then let through.",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 20,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "expr": "sum(count_over_time({service_name=\"guardrail-evaluator\"} | event_type=\"kong_observation\" | route=~\"$route\" | json result=\"apm.result\" | result=~\"waited.*\" [5m]))",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "noValue": "0",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3fb68b",
+        "value": null
+       },
+       {
+        "color": "#f2a93b",
+        "value": 1
+       }
+      ]
+     },
+     "color": {
+      "mode": "thresholds"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+   }
+  },
+  {
+   "id": 8,
+   "type": "timeseries",
+   "title": "What happened to requests, per minute",
+   "description": "Each bar is one minute, split by outcome. A new colour appearing is a plugin starting to stop requests.",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 8,
+    "w": 14,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "sum by (result) (count_over_time({service_name=\"guardrail-evaluator\"} | event_type=\"kong_observation\" | route=~\"$route\" | json result=\"apm.result\" [1m]))",
+     "legendFormat": "{{result}}",
+     "refId": "A",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 55,
+      "gradientMode": "none",
+      "lineInterpolation": "smooth",
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "normal"
+      },
+      "drawStyle": "bars",
+      "barAlignment": 0,
+      "axisBorderShow": false
+     },
+     "min": 0,
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^served$"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3fb68b"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "^waited.*"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#f2a93b"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 9,
+   "type": "timeseries",
+   "title": "Gateway time",
+   "description": "Kong's own time per request. The model's time is not included for the mock model, which answers instantly.",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 14,
+    "y": 8,
+    "w": 10,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "quantile_over_time(0.95, {service_name=\"guardrail-evaluator\"} | event_type=\"kong_observation\" | route=~\"$route\" | json ms=\"duration_ms\" | unwrap ms | __error__=\"\" [1m]) by ()",
+     "legendFormat": "p95",
+     "refId": "A",
+     "queryType": "range"
+    },
+    {
+     "expr": "quantile_over_time(0.5, {service_name=\"guardrail-evaluator\"} | event_type=\"kong_observation\" | route=~\"$route\" | json ms=\"duration_ms\" | unwrap ms | __error__=\"\" [1m]) by ()",
+     "legendFormat": "median",
+     "refId": "B",
+     "queryType": "range"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 14,
+      "gradientMode": "opacity",
+      "lineInterpolation": "smooth",
+      "showPoints": "never",
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none"
+      },
+      "drawStyle": "line",
+      "barAlignment": 0,
+      "axisBorderShow": false
+     },
+     "min": 0,
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "p95"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#f2a93b"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "median"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#5b9cf5"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 10,
+   "type": "table",
+   "title": "Latest requests",
+   "description": "Newest first. 'Time in each plugin' is read from the probe trail: the time between the probes on either side of each plugin. An x marks where the request was stopped. The Prompt column is filled only when prompt capture and export are both on; on this demo the prompts are synthetic.",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 16,
+    "w": 24,
+    "h": 16
+   },
+   "targets": [
+    {
+     "expr": "{service_name=\"guardrail-evaluator\"} | event_type=\"kong_observation\" | route=~\"$route\" | json status=\"response.status\", result=\"apm.result\", ms=\"duration_ms\", path=\"apm.path\", prompt=\"request.prompt_excerpt\", caller=\"consumer\", model=\"request.model\" | line_format \"{{.prompt}}\"",
+     "refId": "A",
+     "queryType": "range",
+     "maxLines": 200
+    }
+   ],
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "source": "labels",
+      "format": "json",
+      "replace": false,
+      "keepTime": false
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "labels": true,
+       "labelTypes": true,
+       "Line": true,
+       "tsNs": true,
+       "id": true,
+       "model": true,
+       "case_id": true,
+       "detected_level": true,
+       "environment": true,
+       "event_id": true,
+       "event_type": true,
+       "guardrail": true,
+       "policy_version": true,
+       "run_id": true,
+       "schema_version": true,
+       "scope_name": true,
+       "service_name": true,
+       "severity_text": true,
+       "stage": true,
+       "outcome": true,
+       "request_id": true,
+       "synthetic": true,
+       "category": true
+      },
+      "indexByName": {
+       "Time": 0,
+       "status": 1,
+       "result": 2,
+       "ms": 3,
+       "prompt": 4,
+       "path": 5,
+       "caller": 6,
+       "route": 7
+      },
+      "renameByName": {
+       "Time": "Time",
+       "status": "Status",
+       "result": "Result",
+       "ms": "Total",
+       "path": "Time in each plugin",
+       "prompt": "Prompt",
+       "caller": "Caller",
+       "model": "Model",
+       "route": "Route"
+      }
+     }
+    },
+    {
+     "id": "convertFieldType",
+     "options": {
+      "conversions": [
+       {
+        "targetField": "Total",
+        "destinationType": "number"
+       },
+       {
+        "targetField": "Status",
+        "destinationType": "number"
+       }
+      ]
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "left",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": true
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Time"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 196
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Status"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 78
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "#3fb68b",
+           "value": null
+          },
+          {
+           "color": "#f2a93b",
+           "value": 400
+          },
+          {
+           "color": "#e5484d",
+           "value": 500
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Result"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 170
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "regex",
+          "options": {
+           "pattern": "^served$",
+           "result": {
+            "color": "#3fb68b",
+            "index": 0
+           }
+          }
+         },
+         {
+          "type": "regex",
+          "options": {
+           "pattern": "^stopped.*",
+           "result": {
+            "color": "#e5484d",
+            "index": 1
+           }
+          }
+         },
+         {
+          "type": "regex",
+          "options": {
+           "pattern": "^waited.*",
+           "result": {
+            "color": "#f2a93b",
+            "index": 2
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Total"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 86
+       },
+       {
+        "id": "unit",
+        "value": "ms"
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "#8b93a1",
+           "value": null
+          },
+          {
+           "color": "#f2a93b",
+           "value": 100
+          },
+          {
+           "color": "#e5484d",
+           "value": 350
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Time in each plugin"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 310
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Caller"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 130
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Route"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 140
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Prompt"
+      },
+      "properties": [
+       {
+        "id": "custom.inspect",
+        "value": true
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "sortBy": [
+     {
+      "displayName": "Time",
+      "desc": true
+     }
+    ],
+    "footer": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": 11,
+   "type": "table",
+   "title": "Stopped requests",
+   "description": "Only the requests that ended inside Kong. Read a few: are these attacks, or honest requests caught by mistake?",
+   "datasource": {
+    "type": "loki",
+    "uid": "go-loki"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 32,
+    "w": 24,
+    "h": 11
+   },
+   "targets": [
+    {
+     "expr": "{service_name=\"guardrail-evaluator\"} | event_type=\"kong_observation\" | route=~\"$route\" | json status=\"response.status\", result=\"apm.result\", ms=\"duration_ms\", path=\"apm.path\", prompt=\"request.prompt_excerpt\", caller=\"consumer\", model=\"request.model\" | result=~\"stopped.*\" | line_format \"{{.prompt}}\"",
+     "refId": "A",
+     "queryType": "range",
+     "maxLines": 200
+    }
+   ],
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "source": "labels",
+      "format": "json",
+      "replace": false,
+      "keepTime": false
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "labels": true,
+       "labelTypes": true,
+       "Line": true,
+       "tsNs": true,
+       "id": true,
+       "model": true,
+       "case_id": true,
+       "detected_level": true,
+       "environment": true,
+       "event_id": true,
+       "event_type": true,
+       "guardrail": true,
+       "policy_version": true,
+       "run_id": true,
+       "schema_version": true,
+       "scope_name": true,
+       "service_name": true,
+       "severity_text": true,
+       "stage": true,
+       "outcome": true,
+       "request_id": true,
+       "synthetic": true,
+       "category": true
+      },
+      "indexByName": {
+       "Time": 0,
+       "status": 1,
+       "result": 2,
+       "ms": 3,
+       "prompt": 4,
+       "path": 5,
+       "caller": 6,
+       "route": 7
+      },
+      "renameByName": {
+       "Time": "Time",
+       "status": "Status",
+       "result": "Result",
+       "ms": "Total",
+       "path": "Time in each plugin",
+       "prompt": "Prompt",
+       "caller": "Caller",
+       "model": "Model",
+       "route": "Route"
+      }
+     }
+    },
+    {
+     "id": "convertFieldType",
+     "options": {
+      "conversions": [
+       {
+        "targetField": "Total",
+        "destinationType": "number"
+       },
+       {
+        "targetField": "Status",
+        "destinationType": "number"
+       }
+      ]
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "left",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": true
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Time"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 196
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Status"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 78
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "#3fb68b",
+           "value": null
+          },
+          {
+           "color": "#f2a93b",
+           "value": 400
+          },
+          {
+           "color": "#e5484d",
+           "value": 500
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Result"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 170
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "regex",
+          "options": {
+           "pattern": "^served$",
+           "result": {
+            "color": "#3fb68b",
+            "index": 0
+           }
+          }
+         },
+         {
+          "type": "regex",
+          "options": {
+           "pattern": "^stopped.*",
+           "result": {
+            "color": "#e5484d",
+            "index": 1
+           }
+          }
+         },
+         {
+          "type": "regex",
+          "options": {
+           "pattern": "^waited.*",
+           "result": {
+            "color": "#f2a93b",
+            "index": 2
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Total"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 86
+       },
+       {
+        "id": "unit",
+        "value": "ms"
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "#8b93a1",
+           "value": null
+          },
+          {
+           "color": "#f2a93b",
+           "value": 100
+          },
+          {
+           "color": "#e5484d",
+           "value": 350
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Time in each plugin"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 310
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Caller"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 130
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Route"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 140
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Prompt"
+      },
+      "properties": [
+       {
+        "id": "custom.inspect",
+        "value": true
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "sortBy": [
+     {
+      "displayName": "Time",
+      "desc": true
+     }
+    ],
+    "footer": {
+     "show": false
+    }
+   }
+  }
+ ]
+}

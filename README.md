@@ -132,6 +132,13 @@ it on localhost, or use the HTTPS install (`deploy/install.sh --https --demo-gua
 In the chain view every guardrail has its own colour, used for its outline, its label and its table row.
 Colour is never a fill.
 
+## Requests and prompts
+
+The "Requests and prompts" dashboard is the request-by-request view, and the home page on an installed host: one
+line per request with its status, whether it was served, stopped (and by which plugin) or made to wait at a
+guardrail, the time each plugin held it, and the start of the prompt. It is built from the evaluator's events
+in Loki; there is no separate tracing backend.
+
 ## Seeing the prompts
 
 The dashboard has a "Requests, one by one" row: status, served or stopped by which plugin, gateway time,

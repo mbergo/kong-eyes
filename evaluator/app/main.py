@@ -179,6 +179,7 @@ def _observation_export_view(gro: dict) -> dict:
     v["request"] = {k: req.get(k) for k in ("method", "path", "body_bytes", "body_sha256", "stream_requested", "model", "message_count", "prompt_chars", "json_valid", "body_in_file")}
     if EXPORT_PROMPT_CHARS > 0 and req.get("body_prefix"):
         v["request"]["prompt_excerpt"] = _prompt_excerpt(req["body_prefix"], EXPORT_PROMPT_CHARS)
+    v["apm"] = passive.apm_view(gro)
     for key in ("stream", "tail"):
         s = gro.get(key) or {}
         v[key] = {k: s.get(k) for k in ("chunks", "bytes", "sha256", "first_chunk_at_ms", "eof_at_ms", "truncated", "observed_at")} if s else None

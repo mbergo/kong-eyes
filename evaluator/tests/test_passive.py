@@ -158,6 +158,16 @@ def test_every_signal_is_marked_investigate():
     assert s["signals"] and all(x["status"] == "investigate" for x in s["signals"])
 
 
+def test_apm_view_names_the_outcome_and_the_time_per_plugin():
+    from app.passive import apm_view as _apm_view
+    served = {"response": {"source": "service"}, "trail": {"gaps": [{"plugins": ["onyx"], "ms": 1}, {"plugins": {}, "ms": 0}, {"plugins": ["straiker"], "ms": 2}]}}
+    assert _apm_view(served) == {"result": "served", "path": "onyx 1 ms  >  straiker 2 ms", "stopped_by": None}
+    waited = dict(served, thresholds={"guardrail_timeouts_ms": {"straiker": 400}}, trail={"gaps": [{"plugins": ["straiker"], "ms": 401}]})
+    assert _apm_view(waited)["result"] == "waited at straiker"
+    blocked = {"response": {"source": "exit"}, "exit": {"plugin_name": "onyx"}, "trail": {"gaps": [], "exit": {"candidates": ["onyx"], "ms": 1}}}
+    assert _apm_view(blocked) == {"result": "stopped by onyx", "path": "onyx 1 ms x", "stopped_by": "onyx"}
+
+
 def test_prune_drops_old_ordinary_traffic_and_keeps_labelled_runs(tmp_path):
     import time
     from app.store import Store

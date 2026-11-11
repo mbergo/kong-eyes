@@ -112,6 +112,30 @@ def _chain_view(r: dict) -> list[dict]:
     return out
 
 
+def apm_view(gro: dict) -> dict:
+    """One request as a line: what happened to it and how long each plugin held it (from the probe trail).
+    result: served | stopped by <plugin> | waited at <plugin> (allowed after about that guardrail's timeout)."""
+    trail = gro.get("trail") or {}
+    timeouts = ((gro.get("thresholds") or {}).get("guardrail_timeouts_ms")) or {}
+    stopped = ((gro.get("response") or {}).get("source")) == "exit"
+    parts, waited = [], None
+    for g in trail.get("gaps") or []:
+        names = g.get("plugins") if isinstance(g.get("plugins"), list) else []
+        if not names:
+            continue
+        ms = g.get("ms") or 0
+        parts.append(f"{' + '.join(names)} {ms:g} ms")
+        if not stopped and len(names) == 1 and timeouts.get(names[0]) and ms >= 0.9 * timeouts[names[0]]:
+            waited = names[0]
+    ex = trail.get("exit") or {}
+    cands = ex.get("candidates") if isinstance(ex.get("candidates"), list) else []
+    blocker = (gro.get("exit") or {}).get("plugin_name") or ("/".join(cands) if cands else None)
+    if stopped and cands:
+        parts.append(f"{' / '.join(cands)} {(ex.get('ms') or 0):g} ms x")
+    result = f"stopped by {blocker or 'the gateway'}" if stopped else f"waited at {waited}" if waited else "served"
+    return {"result": result, "path": "  >  ".join(parts), "stopped_by": blocker if stopped else None}
+
+
 def _is_ai_route(g: dict) -> bool:
     return any(n and n.startswith("ai-proxy") for n in _configured_names(g)) or bool(g.get("ai_native"))
 

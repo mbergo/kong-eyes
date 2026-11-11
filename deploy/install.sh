@@ -84,7 +84,10 @@ fi
 # the bundled demo routes carry synthetic prompts only, so the dashboard may list them
 [[ -n "$(getenv EXPORT_PROMPT_CHARS)" ]] || setenv EXPORT_PROMPT_CHARS 240
 
-GF_EXTRA=""; CADDY=""; CADDY_VOL=""; EV_EXTRA=""
+# the request list is the first thing a visitor sees
+GF_EXTRA="    environment:
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/guardrail-apm.json"
+CADDY=""; CADDY_VOL=""; EV_EXTRA=""
 if [[ -n "$GUARDS" ]]; then
   say "Generating stand-in guardrails: $GUARDS"
   # shellcheck disable=SC2086
@@ -102,7 +105,7 @@ if [[ $HTTPS -eq 1 ]]; then
   setenv EYES_DOMAIN "$DOMAIN"
   [[ -n "$(getenv CADDY_IMAGE)" ]] || setenv CADDY_IMAGE "caddy:2-alpine"
   BIND="127.0.0.1"
-  GF_EXTRA="    environment:
+  GF_EXTRA="${GF_EXTRA}
       GF_SERVER_ROOT_URL: https://${DOMAIN}/
       GF_PANELS_DISABLE_SANITIZE_HTML: \"true\"   # lets the dashboard embed the chain view"
   CADDY="  caddy:
@@ -182,7 +185,8 @@ set -a; . ./.env; set +a
 echo
 say "Installed"
 if [[ $HTTPS -eq 1 ]]; then
-  echo "   Dashboard   https://${DOMAIN}/d/guardrail-live     user ${GRAFANA_ADMIN_USER:-admin}"
+  echo "   Requests    https://${DOMAIN}/d/guardrail-apm      user ${GRAFANA_ADMIN_USER:-admin} (also the home page)"
+  echo "   Dashboard   https://${DOMAIN}/d/guardrail-live"
   echo "   Password    grep GRAFANA_ADMIN_PASSWORD $(pwd)/.env"
   [[ -z "$GUARDS" ]] || echo "   Console     https://${DOMAIN}/eyes/demo            log in to Grafana first"
   echo "   Kong (demo) https://${DOMAIN}/kong/ai/chain          target for scripts/kong-load.py --demo"
