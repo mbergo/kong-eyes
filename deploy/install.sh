@@ -90,6 +90,7 @@ if [[ -n "$GUARDS" ]]; then
   # shellcheck disable=SC2086
   scripts/gen-demo-guards.sh $GUARDS | head -1
   setenv DEMO_CONSOLE true
+  [[ -n "$(getenv DEMO_TRAFFIC_MAX_MIN)" ]] || setenv DEMO_TRAFFIC_MAX_MIN 120
 fi
 if [[ $HTTPS -eq 1 ]]; then
   [[ "$DEST" != "splunk" ]] || { echo "--https serves Grafana: use --destination grafana or both" >&2; exit 2; }
@@ -112,7 +113,7 @@ if [[ $HTTPS -eq 1 ]]; then
       EYES_DOMAIN: \${EYES_DOMAIN}
     ports: [\"80:80\", \"443:443\"]
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deploy:/etc/caddy:ro
       - caddy-data:/data
     depends_on: [grafana, evaluator, kong]"
   CADDY_VOL="  caddy-data: {}"

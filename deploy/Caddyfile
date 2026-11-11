@@ -18,6 +18,13 @@
 
 	handle_path /eyes/* {
 		route {
+			# no Grafana session cookie at all: send the browser to the login page and back
+			@nocookie {
+				method GET
+				path /demo /chain
+				not header_regexp Cookie grafana_session=
+			}
+			redir @nocookie /login?redirectTo=%2Feyes{uri} 302
 			forward_auth grafana:3000 {
 				uri /api/user
 			}
