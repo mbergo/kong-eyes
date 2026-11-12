@@ -138,14 +138,18 @@ curl -fsS "http://localhost:${KONG_ADMIN_PORT:-8001}/status" >/dev/null || { bad
 ok "Kong $(curl -fsS http://localhost:${KONG_ADMIN_PORT:-8001}/ | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("version"), "edition:", d.get("edition"))') up"
 
 # ------------------------------------------------------------ smoke + doctor
+if [[ "$DESTINATION" == "none" ]]; then
+  ok "no outside destination: everything stays in the collector and shows on its own dashboard"
+else
 say "Smoke test: synthetic event to every destination"
 SMOKE=$(curl -fsS -X POST "http://localhost:${EVALUATOR_PORT:-8800}/smoke?wait_s=20")
 echo "$SMOKE" | python3 -c '
 import sys,json; d=json.load(sys.stdin); print("  smoke_id:", d["smoke_id"])
-for k,v in d["destinations"].items(): print(f"  {k:7s} ->", v["status"], v.get("error") or "")
-print("  search (splunk):", d["search"]["splunk"]); print("  search (loki):  ", d["search"]["loki"])'
+for k,v in (d.get("destinations") or {}).items(): print(f"  {k:7s} ->", v["status"], v.get("error") or "")
+s = d.get("search") or {}; print("  search (splunk):", s.get("splunk")); print("  search (loki):  ", s.get("loki"))'
 say "Doctor"
 scripts/doctor.sh || true
+fi
 echo
 say "Next: run the labeled suites"
 echo "   make run-suites        # all suites through Kong -> evaluator -> destinations"
