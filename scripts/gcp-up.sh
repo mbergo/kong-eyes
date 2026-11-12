@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Stand up a Kong Eyes demo on Google Cloud: one small VM, HTTPS, one user and password in front.
 #
-#   KOE_PASSWORD=... scripts/gcp-up.sh NAME [--project P] [--zone us-east4-a] [--type e2-small]
+#   KOE_PASSWORD=... scripts/gcp-up.sh NAME [--project P] [--zone us-east4-a] [--type e2-small] [--disk-type pd-balanced]
 #                                           [--user admin] [--domain my.host.example] [--guards "onyx straiker"]
 #   scripts/gcp-up.sh NAME --destroy [--project P] [--zone Z]
 #
@@ -9,6 +9,7 @@
 #   - a reserved external IP address   (so a DNS name you point at it keeps working)
 #   - a firewall rule                  (80 and 443 from anywhere, only for instances tagged NAME)
 #   - one Ubuntu 24.04 VM, 30 GB disk
+# (--disk-type pd-standard avoids the regional SSD quota. OS Login is left as the project sets it; many organisations require it)
 # then ships this directory over SSH and runs deploy/install.sh --https on it. SSH uses gcloud's own key and
 # the project's default firewall rules; nothing else in the project is touched.
 #
@@ -19,15 +20,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-NAME="${1:-}"; [[ -n "$NAME" && "$NAME" != -* ]] || { sed -n '2,18p' "$0"; exit 2; }
+NAME="${1:-}"; [[ -n "$NAME" && "$NAME" != -* ]] || { sed -n '2,19p' "$0"; exit 2; }
 shift
 [[ "$NAME" =~ ^[a-z][a-z0-9-]{1,40}$ ]] || { echo "NAME: lowercase letters, digits and - only" >&2; exit 2; }
-PROJECT="$(gcloud config get-value project 2>/dev/null)"; ZONE="us-east4-a"; TYPE="e2-small"; AUTH_USER="admin"; DOMAIN=""; GUARDS="onyx straiker"; DESTROY=0
+PROJECT="$(gcloud config get-value project 2>/dev/null)"; ZONE="us-east4-a"; TYPE="e2-small"; AUTH_USER="admin"; DOMAIN=""; GUARDS="onyx straiker"; DESTROY=0; DISK="pd-balanced"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --project) PROJECT="$2"; shift 2;;
     --zone) ZONE="$2"; shift 2;;
     --type) TYPE="$2"; shift 2;;
+    --disk-type) DISK="$2"; shift 2;;
     --user) AUTH_USER="$2"; shift 2;;
     --domain) DOMAIN="$2"; shift 2;;
     --guards) GUARDS="$2"; shift 2;;
@@ -56,8 +58,8 @@ G compute firewall-rules describe "$NAME-web" >/dev/null 2>&1 || { say "Opening 
 if ! G compute instances describe "$NAME" --zone "$ZONE" >/dev/null 2>&1; then
   say "Creating VM $NAME ($TYPE, Ubuntu 24.04) at $IP"
   G compute instances create "$NAME" --zone "$ZONE" --machine-type "$TYPE" --image-family ubuntu-2404-lts-amd64 --image-project ubuntu-os-cloud \
-    --boot-disk-size 30GB --boot-disk-type pd-balanced --address "$IP" --tags "$NAME" --labels project=kong-eyes \
-    --shielded-secure-boot --metadata enable-oslogin=FALSE >/dev/null
+    --boot-disk-size 30GB --boot-disk-type "$DISK" --address "$IP" --tags "$NAME" --labels project=kong-eyes \
+    --shielded-secure-boot >/dev/null
 else
   say "Reusing VM $NAME at $IP"
   G compute instances start "$NAME" --zone "$ZONE" >/dev/null 2>&1 || true
