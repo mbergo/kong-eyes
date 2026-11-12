@@ -98,3 +98,12 @@ def test_pages_load_their_data_from_their_own_address():
     for p in ("/dashboard", "/chain", "/demo"):
         assert "fetch from the page's own address" in get(p, raw=True), p
     assert "POST /passive/translate" not in get("/chain", raw=True)
+
+
+def test_a_gateway_that_sends_data_is_listed_with_its_address_and_routes(traffic):
+    d = get("/api/gateways")
+    mine = [g for g in d["gateways"] if ROUTE in g["routes"]]
+    assert mine, d
+    g = mine[0]
+    assert g["address"] and g["events"] > 0 and g["sending"] in (True, False) and "name" in g and g["last_seen_ms"] >= g["first_seen_ms"]
+    assert "Gateways sending data" in get("/dashboard", raw=True)
