@@ -1,14 +1,11 @@
-# HTTPS front door for the kong-eyes host. Caddy obtains and renews the certificate on its own
-# (Let's Encrypt, falling back to ZeroSSL). EYES_DOMAIN must resolve to this host and ports 80/443
-# must be reachable from the internet for the certificate challenge.
+# HTTPS front door for a Kong Eyes host. Caddy obtains and renews the certificate on its own
+# (Let's Encrypt, falling back to ZeroSSL). EYES_DOMAIN (one name, or several separated by commas) must
+# resolve to this host, and ports 80/443 must be reachable from the internet for the certificate challenge.
 #
-#   /            Grafana (its own login)
-#   /eyes/*      read-only evaluator pages for the dashboard (chain view, summary, findings);
-#                only served to a browser that is already logged in to Grafana
-#   /eyes/demo   the demo console, behind the same Grafana login. It answers only when the evaluator runs
-#                with DEMO_CONSOLE=true (deploy/install.sh --demo-guards); otherwise 404
-#   /ingest/*    where a Kong gateway posts its events (protected by the evaluator's ingest token)
-#   /kong/*      the demo Kong proxy on this host (key-auth), a target for scripts/kong-load.py
+#   /ingest/*    where a Kong gateway posts its events; protected by the collector's own ingest token
+#   /kong/*      the demo Kong proxy on this host; protected by Kong's key-auth
+#   everything   else goes to the collector (dashboard, 3D chain, demo console, API) behind ONE user and
+#                password. deploy/install.sh writes them, as a hash, to deploy/auth.caddy.
 {$EYES_DOMAIN} {
 	encode gzip
 
@@ -16,34 +13,13 @@
 		reverse_proxy evaluator:8000
 	}
 
-	handle_path /eyes/* {
-		route {
-			# no Grafana session cookie at all: send the browser to the login page and back
-			@nocookie {
-				method GET
-				path /demo /chain
-				not header_regexp Cookie grafana_session=
-			}
-			redir @nocookie /login?redirectTo=%2Feyes{uri} 302
-			forward_auth grafana:3000 {
-				uri /api/user
-			}
-			@readonly {
-				method GET
-				path /chain /passive/summary /passive/findings /passive/signals
-			}
-			reverse_proxy @readonly evaluator:8000
-			@demo path /demo /demo/*
-			reverse_proxy @demo evaluator:8000
-			respond 404
-		}
-	}
-
 	handle_path /kong/* {
 		reverse_proxy kong:8000
 	}
 
 	handle {
-		reverse_proxy grafana:3000
+		import /etc/caddy/auth.caddy
+		redir / /dashboard 302
+		reverse_proxy evaluator:8000
 	}
 }
