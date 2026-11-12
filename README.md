@@ -62,7 +62,7 @@ others can reach without something in front of it (a VPN, a private network, or 
 KOE_PASSWORD='...' scripts/gcp-up.sh eyes-demo --user me       # Google Cloud: one small VM, reserved IP, HTTPS
 ```
 
-One user and password sit in front of everything except the two paths machines use (`/ingest`, protected by the
+People sign in once on a sign-in page (it remembers them for a week); that covers everything except the two paths machines use (`/ingest`, protected by the
 collector's token, and `/kong`, protected by Kong's key). The address is `https://<ip-with-dashes>.sslip.io` until
 you point a DNS name at the reserved IP and re-run with `--domain NAME`. `--destroy` removes the VM, the firewall
 rule and the address. On any other host: `scripts/deploy-remote.sh user@host -i key.pem --password-file FILE -- --https --user me`.

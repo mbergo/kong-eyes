@@ -83,6 +83,10 @@ services:
       DEMO_CONSOLE: ${DEMO_CONSOLE:-false}
       DEMO_TRAFFIC_MAX_MIN: ${DEMO_TRAFFIC_MAX_MIN:-30}
       RETENTION_HOURS: ${RETENTION_HOURS:-24}
+      # sign-in page for public installs (deploy/install.sh --https sets these)
+      FRONT_DOOR_USER: ${FRONT_DOOR_USER:-}
+      FRONT_DOOR_HASH: ${FRONT_DOOR_HASH:-}
+      FRONT_DOOR_SECRET: ${FRONT_DOOR_SECRET:-}
       DEMO_GRAFANA_URL: http://localhost:${GRAFANA_PORT:-3000}
       RUNNER_APIKEY: ${RUNNER_APIKEY:-}
       EXPORT_PROMPT_CHARS: ${EXPORT_PROMPT_CHARS:-0}

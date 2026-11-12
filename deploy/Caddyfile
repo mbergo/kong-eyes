@@ -1,25 +1,17 @@
-# HTTPS front door for a Kong Eyes host. Caddy obtains and renews the certificate on its own
-# (Let's Encrypt, falling back to ZeroSSL). EYES_DOMAIN (one name, or several separated by commas) must
-# resolve to this host, and ports 80/443 must be reachable from the internet for the certificate challenge.
+# HTTPS front for a public install. EYES_DOMAIN comes from .env (deploy/install.sh --https).
 #
-#   /ingest/*    where a Kong gateway posts its events; protected by the collector's own ingest token
-#   /kong/*      the demo Kong proxy on this host; protected by Kong's key-auth
-#   everything   else goes to the collector (dashboard, 3D chain, demo console, API) behind ONE user and
-#                password. deploy/install.sh writes them, as a hash, to deploy/auth.caddy.
+# People sign in once on the collector's own sign-in page (evaluator/app/frontdoor.py); the X-Front-Door header
+# tells the collector that a request came in from outside and must carry a session. Two paths are for machines:
+#   /ingest/*  gateways post events here with the collector's token
+#   /kong/*    the demo Kong, which asks for its own API key
 {$EYES_DOMAIN} {
 	encode gzip
-
-	handle /ingest/* {
-		reverse_proxy evaluator:8000
-	}
-
 	handle_path /kong/* {
 		reverse_proxy kong:8000
 	}
-
 	handle {
-		import /etc/caddy/auth.caddy
-		redir / /dashboard 302
-		reverse_proxy evaluator:8000
+		reverse_proxy evaluator:8000 {
+			header_up X-Front-Door 1
+		}
 	}
 }

@@ -12,7 +12,7 @@
 #   4. --https: adds Caddy on 80/443 with an automatic certificate and ONE user and password in front of
 #      everything (the dashboard is the home page). Without --domain it uses <public-ip>.sslip.io.
 #      The password comes from --password-file (read once, then deleted) or is generated and printed once.
-#      Only its hash is kept, in deploy/auth.caddy.
+#      Only its hash is kept, in .env. People sign in once on a normal sign-in page.
 #   5. --demo-guards "a b": generates stand-in guardrails with those names on /ai/named, turns on the demo
 #      console (/demo) and starts its traffic
 #   6. runs scripts/setup.sh (secrets, config validation, build, start)
@@ -105,15 +105,18 @@ if [[ $HTTPS -eq 1 ]]; then
   if [[ -n "$PASSFILE" ]]; then
     [[ -s "$PASSFILE" ]] || { echo "--password-file $PASSFILE is empty or missing" >&2; exit 1; }
     PW="$(head -n1 "$PASSFILE")"; rm -f "$PASSFILE"
-  elif [[ ! -s deploy/auth.caddy ]]; then
+  elif [[ -z "$(getenv FRONT_DOOR_HASH)" ]]; then
     PW="$(head -c 18 /dev/urandom | base64 | tr -d '/+=' | cut -c1-20)"; NEW_PASSWORD="$PW"
   fi
   if [[ -n "$PW" ]]; then
-    HASH="$(DRUN docker run --rm -e KOE_PW="$PW" "$(getenv CADDY_IMAGE)" sh -c 'caddy hash-password --plaintext "$KOE_PW"' | tail -1)"
-    [[ "$HASH" == \$2* ]] || { echo "could not hash the password" >&2; exit 1; }
-    printf 'basic_auth {\n\t%s %s\n}\n' "$AUTH_USER" "$HASH" > deploy/auth.caddy
-    say "Front-door login set for user $AUTH_USER"
+    HASH="$(KOE_PW="$PW" python3 -c 'import hashlib,os,secrets; s=secrets.token_bytes(16); n=200000; print("pbkdf2:%d:%s:%s" % (n, s.hex(), hashlib.pbkdf2_hmac("sha256", os.environ["KOE_PW"].encode(), s, n).hex()))')"
+    [[ "$HASH" == pbkdf2:* ]] || { echo "could not hash the password" >&2; exit 1; }
+    setenv FRONT_DOOR_HASH "$HASH"
+    say "Sign-in set for user $AUTH_USER"
   fi
+  setenv FRONT_DOOR_USER "$AUTH_USER"
+  [[ -n "$(getenv FRONT_DOOR_SECRET)" ]] || setenv FRONT_DOOR_SECRET "$(head -c 32 /dev/urandom | base64 | tr -d '/+=')"
+  rm -f deploy/auth.caddy
   CADDY="  caddy:
     image: \${CADDY_IMAGE}
     restart: unless-stopped
