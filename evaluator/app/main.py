@@ -22,7 +22,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from . import adjudicate as adj
-from . import api, demo, frontdoor, ingest, metrics, passive, translate
+from . import api, demo, frontdoor, gateways, ingest, metrics, passive, translate
 from .exporters import metrics_hooks
 from .exporters.otlp import OtlpConfig, OtlpLogs
 from .exporters.splunk import SplunkConfig, SplunkHEC
@@ -119,6 +119,7 @@ async def ingest_kong(request: Request):
         metrics_hooks.ingest_result("kong", "rejected")
         raise HTTPException(400, str(e))
     accepted = dup = skipped = bad = 0
+    seen_routes, seen_envs, seen_versions = set(), set(), set()
     for ev in events:
         try:
             gro = ingest.extract_observer(ev, NAMESPACE)
@@ -127,6 +128,7 @@ async def ingest_kong(request: Request):
                 continue
             gro["ts"] = gro.get("started_at_ms")
             gro["route_name"] = (gro.get("route") or {}).get("name")
+            seen_routes.add(gro["route_name"]); seen_envs.add(gro.get("environment")); seen_versions.add(gro.get("kong_version"))
             if store.insert_kong_observation(gro, ev):
                 accepted += 1
                 if EXPORT_OBSERVATIONS:
@@ -138,6 +140,7 @@ async def ingest_kong(request: Request):
             bad += 1
             log.warning("malformed observation skipped: %s", e)
             store.log_ingest("kong", "rejected", str(e)[:200]); metrics_hooks.ingest_result("kong", "rejected")
+    gateways.note(request, accepted + dup, seen_routes, seen_envs, seen_versions)
     store.log_ingest("kong", "accepted", str(accepted))
     metrics_hooks.ingest_result("kong", "accepted", accepted)
     if dup:
@@ -488,6 +491,7 @@ api.store = store
 api.summary = _passive_summary
 api.latest_findings = lambda: (store.latest_findings(1) or [None])[0]
 app.include_router(api.router)
+app.include_router(gateways.router)
 
 # separate, demo-only console (404 unless DEMO_CONSOLE=true); see demo.py
 demo.translate_now = passive_translate

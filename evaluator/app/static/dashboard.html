@@ -66,6 +66,10 @@ details { margin-top: 34px; } summary { cursor: pointer; font-weight: 600; } det
 <div id="err" role="alert"></div>
 <section id="plain" aria-live="polite"></section>
 
+<h2>Gateways sending data</h2>
+<p class="sub">Every Kong that reports here shows up in this list by itself, with the address it sends from and the name that address resolves to.</p>
+<div class="panel" id="gws">None yet. A gateway appears here a few seconds after its first request.</div>
+
 <h2>Where the requests went</h2>
 <p class="sub">Read it left to right. The band is every request that came in; its thickness is how many. What a guardrail stops falls away below it. What is left on the right reached the model.</p>
 <div class="panel" id="flow"></div>
@@ -278,6 +282,23 @@ function load() {
 }
 $("route").onchange = function () { st.route = this.value; load(); };
 $("pause").onclick = function () { st.paused = !st.paused; this.setAttribute("aria-pressed", st.paused ? "true" : "false"); this.textContent = st.paused ? "Resume the list" : "Pause the list"; if (!st.paused) loadReqs(); };
+function gateways() {
+  get("api/gateways").then(function (d) {
+    var box = $("gws"); if (!d.gateways.length) return;
+    var t = document.createElement("table"), head = document.createElement("tr");
+    ["Gateway", "Address", "Status", "Routes", "Events", "Last heard from"].forEach(function (x) { var th = document.createElement("th"); th.textContent = x; head.appendChild(th); });
+    t.appendChild(head);
+    d.gateways.forEach(function (g) {
+      var tr = document.createElement("tr"), ago = g.seconds_since_last < 90 ? Math.round(g.seconds_since_last) + " s ago" : Math.round(g.seconds_since_last / 60) + " min ago";
+      [[g.name || (g.on_this_server ? "on this server" : "no name for this address"), ""], [g.address, "t"], [g.sending ? "sending" : "quiet", g.sending ? "served" : "waited"],
+       [g.routes.join(", ") || "none yet", ""], [n(g.events), "num"], [ago + (g.kong_versions.length ? " \u00b7 Kong " + g.kong_versions.join(", ") : ""), "t"]]
+        .forEach(function (c) { var td = document.createElement("td"); td.textContent = c[0]; if (c[1]) td.className = c[1]; tr.appendChild(td); });
+      t.appendChild(tr);
+    });
+    box.textContent = ""; box.appendChild(t);
+  }).catch(function () {});
+}
+gateways(); setInterval(function () { if (!document.hidden) gateways(); }, 5000);
 controls(); load(); setInterval(function () { if (!document.hidden) load(); }, st.window_s <= 300 ? 3000 : 10000);
 })();
 </script>
