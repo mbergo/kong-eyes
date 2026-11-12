@@ -87,3 +87,8 @@ def test_dashboard_links_the_other_pages_and_says_how_to_connect_a_kong():
     assert 'href="chain"' in page and 'href="demo"' in page and "Connect your Kong" in page
     c = get("/api/connect")
     assert c["ingest_url"].endswith("/ingest/kong") and c["ingest_token"] == ENV["INGEST_TOKEN"]
+
+
+def test_the_3d_page_explains_what_its_shapes_mean():
+    page = get("/chain", raw=True)
+    assert "How to read this" in page and "A taller box" in page and "A dot with a ring" in page and 'href="dashboard"' in page
