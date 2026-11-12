@@ -24,6 +24,11 @@ latest_findings = None  # set by main.py: () -> dict | None
 PROMPT_CHARS = int(os.environ.get("EXPORT_PROMPT_CHARS", "0") or 0)
 
 
+def _window(window_s: float) -> float:
+    """Between 10 seconds and 24 hours; anything else falls back to five minutes."""
+    return window_s if 10 <= window_s <= 86400 else 300.0
+
+
 def _pct(a: float, b: float) -> float:
     return round(a / b, 4) if b else 0.0
 
@@ -41,19 +46,22 @@ def _plain(route: str, r: dict, guards: list[dict], window_s: float) -> list[str
             continue
         s = f"{g['name']} looked at {g['reached']:,} of them and stopped {g['stopped']:,} ({g['stopped_share']:.0%})."
         if g["fail_open"]:
-            s += f" {g['fail_open']:,} waited for about its time limit and were then let through without a decision."
+            s += f" {g['fail_open']:,} waited for about its time limit and were then let through, so they may not have been checked."
         out.append(s)
     return out
 
 
 @router.get("/api/overview")
 def overview(window_s: float = 300, route: str | None = None):
+    window_s = _window(window_s)
     s = summary(window_s, None, False)
     routes = []
     for name, r in sorted(s["routes"].items(), key=lambda kv: -kv[1].get("requests", 0)):
         routes.append({"name": name, "requests": r.get("requests", 0), "stopped": r.get("blocked", 0), "ai": r.get("ai_route", False),
                        "guardrails": r.get("guardrails_enabled", [])})
     chosen = route if route in s["routes"] else next((x["name"] for x in routes if x["ai"] and x["guardrails"]), routes[0]["name"] if routes else None)
+    if chosen:                                             # the guardrail numbers and the patterns are for this route only
+        s = summary(window_s, chosen, False)
     r = s["routes"].get(chosen) or {}
     order = [c["name"] for c in r.get("chain", []) if c["kind"] in ("guardrail", "candidate")]
     labels = {c["name"]: c.get("label") or c["name"] for c in r.get("chain", [])}
@@ -63,23 +71,24 @@ def overview(window_s: float = 300, route: str | None = None):
         if not g:
             continue
         reached = g.get("reached") or 0
-        stopped = (g.get("blocked") or 0) + (g.get("enforced_inline") or 0)
+        stopped = g.get("blocked") or 0                    # only what ended the request; a redaction lets it continue
         lat = g.get("latency_ms") or {}
         ab = (s.get("after_block") or {}).get(name) or {}
         guards.append({"name": name, "label": labels.get(name, name), "reached": reached, "stopped": stopped, "stopped_share": _pct(stopped, reached),
                        "time_ms": {"median": lat.get("p50"), "p95": lat.get("p95"), "max": lat.get("max")}, "timeout_ms": g.get("timeout_ms"),
                        "fail_open": g.get("fail_open_suspects") or 0, "no_decision": g.get("no_verdict") or 0,
                        "flagged_but_served": g.get("detected_not_enforced") or 0,
-                       "rewrites": (g.get("request_rewrites") or 0) + (g.get("response_rewrites") or 0),
+                       "rewrites": (g.get("request_rewrites") or 0) + (g.get("response_rewrites") or 0) + (g.get("enforced_inline") or 0),
                        "retries_after_stop": ab.get("followed_by_retry") or 0, "retries_got_through": ab.get("retry_got_through") or 0,
                        "exact_timing": not g.get("latency_shared_gap_requests")})
     signals = [{"kind": x.get("kind"), "severity": x.get("severity"), "guardrail": x.get("guardrail"), "route": x.get("route"), "summary": x.get("summary")}
                for x in s.get("signals", []) if not x.get("route") or x.get("route") == chosen]
     f = latest_findings() if latest_findings else None
     n, stopped = r.get("requests", 0), r.get("blocked", 0)
+    elsewhere = max(0, stopped - sum(g["stopped"] for g in guards))      # auth, rate limits, anything that is not a guardrail
     return {"generated_at_ms": int(time.time() * 1000), "window_s": window_s, "route": chosen, "routes": routes,
             "totals": {"requests": n, "served": n - stopped, "stopped": stopped, "stopped_share": _pct(stopped, n),
-                       "waited": sum(g["fail_open"] for g in guards),
+                       "waited": sum(g["fail_open"] for g in guards), "stopped_elsewhere": elsewhere,
                        "gateway_ms": r.get("duration_ms") or {}, "guardrail_share_of_time": r.get("chain_share_p50")},
             "chain": [{"name": c["name"], "label": c.get("label") or c["name"], "kind": c["kind"]} for c in r.get("chain", [])
                       if c["kind"] in ("guardrail", "candidate", "router")],
@@ -91,11 +100,12 @@ def overview(window_s: float = 300, route: str | None = None):
 
 @router.get("/api/timeseries")
 def timeseries(window_s: float = 300, buckets: int = 60, route: str | None = None):
+    window_s = _window(window_s)
     buckets = max(10, min(240, buckets))
     now = int(time.time() * 1000)
     step = max(1000, int(window_s * 1000 / buckets))
     start = (now - int(window_s * 1000)) // step * step
-    where, params = "started_at_ms >= ? AND run_id IS NULL", [start]
+    where, params = "started_at_ms >= ? AND started_at_ms <= ? AND run_id IS NULL", [start, now + step]
     if route:
         where += " AND route = ?"; params.append(route)
     rows = store.q(f"SELECT (started_at_ms - ?) / ? AS b, COALESCE(result, 'unknown') AS result, COUNT(*) AS n FROM kong_observations "

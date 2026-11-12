@@ -47,13 +47,14 @@ def test_overview_says_in_plain_words_what_each_guardrail_did(traffic):
     o = get(f"/api/overview?window_s=60&route={ROUTE}")
     t = o["totals"]
     assert o["route"] == ROUTE and t["requests"] >= traffic * 0.8 and t["served"] + t["stopped"] == t["requests"]
+    assert t["stopped"] == sum(g["stopped"] for g in o["guardrails"]) + t["stopped_elsewhere"]      # the flow picture adds up
     assert len(o["guardrails"]) == 2 and all(g["reached"] > 0 for g in o["guardrails"])
     first, second = o["guardrails"]
     assert first["stopped"] > 0 and second["stopped"] > 0                         # plain and disguised attack bursts
     assert second["fail_open"] > 0 and second["time_ms"]["max"] >= 350             # the slow burst: waited about 400 ms, then let through
     assert t["waited"] == sum(g["fail_open"] for g in o["guardrails"])
     assert [c["kind"] for c in o["chain"]] == ["guardrail", "guardrail", "router"]
-    assert o["plain"][0].startswith("In the last 60 seconds") and first["name"] in " ".join(o["plain"]) and "let through" in " ".join(o["plain"])
+    assert o["plain"][0].startswith("In the last 60 seconds") and first["name"] in " ".join(o["plain"]) and "may not have been checked" in " ".join(o["plain"])
 
 
 def test_timeseries_and_request_list_come_from_the_collector_store(traffic):
@@ -77,5 +78,5 @@ def test_timeseries_and_request_list_come_from_the_collector_store(traffic):
 def test_dashboard_page_is_self_contained(traffic):
     page = get("/dashboard", raw=True)
     assert "Where the requests went" in page and "api/overview" in page
-    external = [u for u in re.findall(r'(?:src|href)="(https?://[^"]+)"', page)] + re.findall(r"url\((https?://[^)]+)\)", page)
+    external = re.findall(r"""(?:src|href)\s*=\s*["']((?:https?:)?//[^"']+)""", page) + re.findall(r"""url\(\s*["']?((?:https?:)?//[^)"']+)""", page)
     assert not external, external                                                    # no CDN, fonts or scripts from anywhere else

@@ -99,7 +99,7 @@ services:
     volumes:
       - evaluator-data:/data
     ports:
-      - "${EVALUATOR_PORT:-8800}:8000"
+      - "${EVALUATOR_BIND:-127.0.0.1}:${EVALUATOR_PORT:-8800}:8000"   # the dashboard has no login: local only unless you put something in front
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 3s

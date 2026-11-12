@@ -128,7 +128,7 @@ def apm_view(gro: dict) -> dict:
         ms = g.get("ms") or 0
         parts.append(f"{' + '.join(names)} {ms:g} ms")
         steps.append({"plugin": " + ".join(names), "ms": ms, "stopped": False})
-        if any(n in guards for n in names):
+        if len(names) == 1 and names[0] in guards:      # a gap shared with another plugin cannot be split, so it is not counted
             guard_ms = (guard_ms or 0) + ms
         if not stopped and len(names) == 1 and timeouts.get(names[0]) and ms >= 0.9 * timeouts[names[0]]:
             waited = names[0]
@@ -138,9 +138,11 @@ def apm_view(gro: dict) -> dict:
     if stopped and cands:
         parts.append(f"{' / '.join(cands)} {(ex.get('ms') or 0):g} ms x")
         steps.append({"plugin": " / ".join(cands), "ms": ex.get("ms") or 0, "stopped": True})
-        if any(n in guards for n in cands):
+        if len(cands) == 1 and cands[0] in guards:
             guard_ms = (guard_ms or 0) + (ex.get("ms") or 0)
-    result = f"stopped by {blocker or 'the gateway'}" if stopped else f"waited at {waited}" if waited else "served"
+    source = (gro.get("response") or {}).get("source")
+    result = (f"stopped by {blocker or 'the gateway'}" if stopped else "gateway error" if source == "error"
+              else f"waited at {waited}" if waited else "served")
     return {"result": result, "path": "  >  ".join(parts), "stopped_by": blocker if stopped else None, "steps": steps, "guard_ms": guard_ms}
 
 
@@ -152,8 +154,11 @@ def prompt_excerpt(body_prefix: str, limit: int) -> Optional[str]:
         users = [m.get("content") for m in msgs if isinstance(m, dict) and m.get("role") == "user" and isinstance(m.get("content"), str)]
         text = users[-1] if users else None
     except Exception:  # noqa: BLE001
-        i = body_prefix.rfind('"content":')            # body was cut mid-JSON: take what follows the last content key
-        text = body_prefix[i + 10:].lstrip(' "') if i >= 0 else None
+        # body was cut mid-JSON: take what follows the last content key, but only when that message is the user's
+        i = body_prefix.rfind('"content":')
+        j = body_prefix.rfind('"role"', 0, i if i >= 0 else 0)
+        role_is_user = j >= 0 and body_prefix[j:i].replace(" ", "").startswith('"role":"user"')
+        text = body_prefix[i + 10:].lstrip(' "') if i >= 0 and role_is_user else None
     if not text:
         return None
     text = " ".join(text.split())

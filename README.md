@@ -50,7 +50,11 @@ Your guardrails are not modified. The probes only read and annotate the request 
 Open `http://localhost:8800/dashboard`. It is one page, served by the collector itself, written for people who have
 never opened Kong: a few sentences saying what happened, a picture of where the requests went, one panel per
 guardrail with what each number means, charts over time, the patterns worth a look, and the requests one by one.
-It needs no Grafana, Loki or Prometheus; those are now optional (`DESTINATION=grafana`).
+It needs no Grafana, Loki or Prometheus.
+
+**The dashboard has no login.** It shows callers, request ids and, when prompt capture is on, the start of each prompt.
+The collector's port is therefore bound to this machine only (`EVALUATOR_BIND=127.0.0.1`). Do not put it on a network
+others can reach without something in front of it (a VPN, a private network, or a proxy that asks for a password).
 
 ## `koe`: connect to any Kong without installing anything
 
