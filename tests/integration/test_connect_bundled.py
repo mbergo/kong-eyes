@@ -116,3 +116,10 @@ def test_connect_reports_one_guardrail_through_bundled_plugins(gateway):
     r = cli("disconnect", "--route", ROUTE, "--yes")
     assert r.returncode == 0 and "removed" in r.stdout
     assert sorted(p["name"] for p in api("GET", f"{ADMIN}/routes/{ROUTE}/plugins")["data"]) == ["ai-proxy", GUARD, "key-auth"]
+
+
+def test_without_a_route_it_lists_the_routes_to_choose_from(gateway):
+    r = cli("connect", "--ingest-url", "http://collector.invalid/ingest/kong", "--dry-run")
+    out = r.stdout + r.stderr
+    assert "A route is one entry point" in out and "ai-named-route" in out and "/ai/named" in out, out[-800:]
+    assert r.returncode != 0 and "--route NAME" in out   # several routes and no terminal: it asks for the name, and changes nothing

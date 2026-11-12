@@ -1,6 +1,6 @@
 """koe: see what the guardrail on a Kong route is doing. (Kong Eyes; "koe" is also a Brazilian hello.)
 
-  koe connect    --route NAME --ingest-url URL [--guardrail NAME] [--timeout-ms N] [--yes]
+  koe connect    [--route NAME] --ingest-url URL [--guardrail NAME] [--timeout-ms N] [--yes]
   koe disconnect --route NAME [--yes]
   koe status
   koe demo traffic --kong-url URL --apikey KEY [--rps 60] [--minutes 10]
@@ -19,7 +19,8 @@ from . import __version__, connect as C, demo as D
 
 def _kong(a) -> C.Kong:
     if not a.admin_url:
-        raise SystemExit("where is Kong's Admin API? Pass --admin-url or set KONG_ADMIN_URL (for example http://localhost:8001)")
+        a.admin_url = "http://localhost:8001"
+        print("No --admin-url or KONG_ADMIN_URL given, trying Kong's usual Admin API address: http://localhost:8001")
     return C.Kong(a.admin_url, a.admin_token)
 
 
@@ -31,8 +32,36 @@ def _confirm(a, question: str) -> bool:
     return input(f"{question} [y/N] ").strip().lower() in ("y", "yes")
 
 
+def _pick_route(kong: C.Kong, a) -> str:
+    """No --route given: show the routes this Kong has and let the person choose one."""
+    routes = kong.pages("/routes")
+    if not routes:
+        raise SystemExit("this Kong has no routes yet, so there is nothing to watch")
+    on = {}
+    for p in kong.pages("/plugins"):
+        if (p.get("route") or {}).get("id") and "kong-eyes" not in (p.get("tags") or []):
+            on.setdefault(p["route"]["id"], []).append(p["name"])
+    key = lambda r: r.get("name") or r["id"]
+    print("A route is one entry point on your Kong (a path such as /chat). These are the ones it has:")
+    for n, r in enumerate(routes, 1):
+        print(f"  {n}. {key(r):<30} {', '.join(r.get('paths') or r.get('hosts') or ['any path']):<26} plugins: {', '.join(sorted(on.get(r['id'], []))) or 'none'}")
+    if len(routes) == 1:
+        print(f"Only one, so using {key(routes[0])}.")
+        return key(routes[0])
+    if not sys.stdin.isatty():
+        raise SystemExit("more than one route: run again with --route NAME (a name from the list above)")
+    while True:
+        v = input(f"Which one carries the AI traffic? [1-{len(routes)}] ").strip()
+        if v.isdigit() and 1 <= int(v) <= len(routes):
+            return key(routes[int(v) - 1])
+        if v in [key(r) for r in routes]:
+            return v
+
+
 def cmd_connect(a) -> int:
     kong = _kong(a)
+    if not a.route:
+        a.route = _pick_route(kong, a)
     p = C.plan(kong, a)
     i = p["info"]
     print(f"Kong {i['version']} ({i['edition']}, {'DB-less' if i['dbless'] else 'database'}), route {p['route'].get('name') or p['route']['id']}")
@@ -94,7 +123,7 @@ def main(argv=None) -> int:
 
     c = sub.add_parser("connect", help="start watching one route, using only plugins Kong already ships")
     common(c)
-    c.add_argument("--route", required=True, help="route name or id")
+    c.add_argument("--route", help="route name or id; leave it out to choose from a list")
     c.add_argument("--ingest-url", default=os.environ.get("KONG_EYES_INGEST_URL"), required=not os.environ.get("KONG_EYES_INGEST_URL"),
                    help="the collector, as Kong reaches it, e.g. https://eyes.example.com/ingest/kong")
     c.add_argument("--ingest-token", default=os.environ.get("KONG_EYES_INGEST_TOKEN"))

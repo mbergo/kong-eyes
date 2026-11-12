@@ -50,6 +50,8 @@ th, td { text-align: right; padding: 3px 4px; border-bottom: 1px solid var(--hai
 th { color: var(--muted); font-weight: 400; }
 @media (max-width: 860px) { .app { grid-template-columns: 1fr; grid-template-rows: 52% 48%; } .rail { border-left: 0; border-top: 1px solid var(--hairline); } }
 </style>
+<script>/* fetch from the page's own address, so a link opened as https://user:password@host/ still works */
+(function(){var f=window.fetch,base=location.origin+location.pathname;window.fetch=function(u,o){if(typeof u==="string"&&!/^[a-z][a-z0-9+.-]*:/i.test(u))u=new URL(u,base).href;return f.call(window,u,o).then(function(r){if(r.status===401&&r.headers.get('x-koe-login'))location.href='/login?next='+encodeURIComponent(location.pathname+location.search);return r;});};})();</script>
 </head>
 <body>
 <div class="app">
@@ -73,7 +75,7 @@ th { color: var(--muted); font-weight: 400; }
     <section><h2>Route</h2><div class="seg" id="routes"></div></section>
     <section><label><input type="checkbox" id="runs"> include labelled test runs</label> <span class="note" id="win"></span></section>
     <section><h2>Guardrails on this route</h2><table id="tbl"></table></section>
-    <section><h2>In plain language</h2><div class="head" id="headline">No translation yet. POST /passive/translate to create one.</div><div class="note" id="prov"></div></section>
+    <section id="plainsec" hidden><h2>In plain language</h2><div class="head" id="headline"></div><div class="note" id="prov"></div></section>
     <section><h2>Signals to investigate</h2><div class="list" id="signals"></div></section>
     <p class="note">Signals are places to look, not verdicts: ordinary traffic carries no labels, so nothing here proves a guardrail right or wrong.</p>
   </aside>
@@ -229,7 +231,7 @@ function rail() {
 function load() {
   var q = "passive/summary?window_s=" + WINDOW_S + ($("runs").checked ? "&include_runs=true" : "");
   fetch(q).then(function (r) { return r.json(); }).then(function (d) { data = d; rail(); build(); }).catch(function (e) { $("sub").textContent = "Could not load /passive/summary: " + e.message; });
-  fetch("passive/findings").then(function (r) { return r.json(); }).then(function (f) { if (f && f.headline) { $("headline").textContent = f.headline;
+  fetch("passive/findings").then(function (r) { return r.json(); }).then(function (f) { if (f && f.headline) { $("plainsec").hidden = false; $("headline").textContent = f.headline;
     $("prov").textContent = "translator: " + f.provider + (f.model ? " (" + f.model + ")" : "") + " · " + new Date(f.generated_at_ms).toLocaleString(); } }).catch(function () {});
 }
 function resize() { var r = stage.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2); W = Math.max(1, r.width); H = Math.max(1, r.height);

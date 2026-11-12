@@ -35,6 +35,8 @@ button:disabled { opacity: .5; cursor: default; }
 #msg { font-size: 12.5px; min-height: 18px; } #msg.err { color: var(--warn); } #msg.ok { color: var(--ok); }
 @media (max-width: 900px) { .app { grid-template-columns: 1fr; grid-template-rows: auto 70vh; } .panel { border-right: 0; border-bottom: 1px solid var(--hairline); } }
 </style>
+<script>/* fetch from the page's own address, so a link opened as https://user:password@host/ still works */
+(function(){var f=window.fetch,base=location.origin+location.pathname;window.fetch=function(u,o){if(typeof u==="string"&&!/^[a-z][a-z0-9+.-]*:/i.test(u))u=new URL(u,base).href;return f.call(window,u,o).then(function(r){if(r.status===401&&r.headers.get('x-koe-login'))location.href='/login?next='+encodeURIComponent(location.pathname+location.search);return r;});};})();</script>
 </head>
 <body>
 <div class="app">
@@ -59,7 +61,7 @@ button:disabled { opacity: .5; cursor: default; }
     <section>
       <h2>Monitoring</h2>
       <div class="card">
-        <label class="check"><input type="checkbox" id="prompts"> Show the start of each prompt in Grafana</label>
+        <label class="check"><input type="checkbox" id="prompts"> Show the start of each prompt in the request list</label>
         <p class="note" id="prompts_note"></p>
         <div class="btns" style="margin-top:10px"><button id="translate">Refresh the plain-language findings</button><a class="btn" id="grafana" target="_blank" rel="noopener" hidden>Open Grafana</a></div>
         <p class="note" id="tnote"></p>

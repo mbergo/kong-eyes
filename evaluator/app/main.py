@@ -22,7 +22,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from . import adjudicate as adj
-from . import api, demo, ingest, metrics, passive, translate
+from . import api, demo, frontdoor, ingest, metrics, passive, translate
 from .exporters import metrics_hooks
 from .exporters.otlp import OtlpConfig, OtlpLogs
 from .exporters.splunk import SplunkConfig, SplunkHEC
@@ -471,6 +471,9 @@ async def passive_translate(window_s: float | None = None, include_runs: bool = 
           "provider": doc["provider"], "headline": doc["headline"], "findings": doc["findings"]}
     _fanout(ev)
     return doc
+
+
+frontdoor.install(app)        # the sign-in page; only active on public installs
 
 
 @app.get("/", include_in_schema=False)

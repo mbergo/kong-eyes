@@ -50,6 +50,8 @@ td.p { max-width: 46ch; } .steps { white-space: nowrap; } .steps b { font-weight
 details { margin-top: 34px; } summary { cursor: pointer; font-weight: 600; } details dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; max-width: 90ch; } details dt { font-weight: 600; } details dd { margin: 0; color: var(--muted); }
 #err { color: var(--stopped); margin-top: 10px; }
 </style>
+<script>/* fetch from the page's own address, so a link opened as https://user:password@host/ still works */
+(function(){var f=window.fetch,base=location.origin+location.pathname;window.fetch=function(u,o){if(typeof u==="string"&&!/^[a-z][a-z0-9+.-]*:/i.test(u))u=new URL(u,base).href;return f.call(window,u,o).then(function(r){if(r.status===401&&r.headers.get('x-koe-login'))location.href='/login?next='+encodeURIComponent(location.pathname+location.search);return r;});};})();</script>
 </head>
 <body>
 <main>
@@ -58,7 +60,7 @@ details { margin-top: 34px; } summary { cursor: pointer; font-weight: 600; } det
   <label>Route <select id="route" aria-label="Route"></select></label>
   <span class="seg" id="win" role="group" aria-label="Time window"></span>
   <span class="sp"></span>
-  <nav aria-label="Pages"><a href="chain">3D live flow</a><a href="demo">Demo console</a><a href="#connect">Connect your Kong</a></nav>
+  <nav aria-label="Pages"><a href="chain">3D live flow</a><a href="demo">Demo console</a><a href="#connect">Connect your Kong</a><a href="logout" id="signout" hidden>Sign out</a></nav>
   <span id="stamp"></span>
 </header>
 <div id="err" role="alert"></div>
@@ -110,17 +112,18 @@ Your guardrail is not changed. <code>koe disconnect</code> removes everything it
 <pre id="connect-cmd">loading…</pre>
 <p><button id="connect-copy" type="button">Copy the command</button></p>
 <ol>
-<li>Replace <code>YOUR_ROUTE</code> with the route the guardrail is on, and the Admin API address if it is not the usual one.</li>
-<li>Run it. It shows what it will add and asks before changing anything.</li>
-<li>Send traffic through that route, then pick the route in the selector at the top of this page.</li>
+<li>Run it. It lists the entry points (routes) your Kong has, with their paths and plugins, and asks which one carries the AI traffic.</li>
+<li>It then shows what it will add and asks before changing anything.</li>
+<li>Send traffic through that route, then pick it in the selector at the top of this page.</li>
 </ol>
 </section>
 </main>
 <script>
+fetch('api/session').then(r => r.json()).then(s => { if (s.sign_in) document.getElementById('signout').hidden = false; }).catch(() => {});
 fetch('api/connect').then(r => r.json()).then(c => {
   const cmd = 'git clone https://github.com/mbergo/kong-eyes && cd kong-eyes\n' +
-    'export KONG_ADMIN_URL=http://localhost:8001\n' +
-    'bin/koe connect --route YOUR_ROUTE \\\n  --ingest-url ' + c.ingest_url + (c.ingest_token ? ' \\\n  --ingest-token ' + c.ingest_token : '');
+    'export KONG_ADMIN_URL=http://localhost:8001   # where your Kong answers its Admin API\n' +
+    'bin/koe connect \\\n  --ingest-url ' + c.ingest_url + (c.ingest_token ? ' \\\n  --ingest-token ' + c.ingest_token : '');
   document.getElementById('connect-cmd').textContent = cmd;
   document.getElementById('connect-copy').onclick = e => navigator.clipboard.writeText(cmd.replace(/\\\n\s*/g, '')).then(() => { e.target.textContent = 'Copied'; });
 }).catch(() => { document.getElementById('connect-cmd').textContent = 'Could not load the connection details.'; });
