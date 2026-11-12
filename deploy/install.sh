@@ -181,6 +181,8 @@ YAML
 # ----------------------------------------------------------------- 6. stack
 say "Running scripts/setup.sh --destination ${DEST}"
 DRUN scripts/setup.sh --destination "$DEST"
+# Caddy reads its config once at start: restart it so a changed Caddyfile or domain takes effect
+[[ $HTTPS -eq 0 ]] || DRUN docker compose restart caddy >/dev/null 2>&1 || true
 
 if [[ -n "$GUARDS" ]]; then
   say "Starting the demo console's traffic"
