@@ -80,3 +80,10 @@ def test_dashboard_page_is_self_contained(traffic):
     assert "Where the requests went" in page and "api/overview" in page
     external = re.findall(r"""(?:src|href)\s*=\s*["']((?:https?:)?//[^"']+)""", page) + re.findall(r"""url\(\s*["']?((?:https?:)?//[^)"']+)""", page)
     assert not external, external                                                    # no CDN, fonts or scripts from anywhere else
+
+
+def test_dashboard_links_the_other_pages_and_says_how_to_connect_a_kong():
+    page = get("/dashboard", raw=True)
+    assert 'href="chain"' in page and 'href="demo"' in page and "Connect your Kong" in page
+    c = get("/api/connect")
+    assert c["ingest_url"].endswith("/ingest/kong") and c["ingest_token"] == ENV["INGEST_TOKEN"]

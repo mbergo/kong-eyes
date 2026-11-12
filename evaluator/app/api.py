@@ -12,7 +12,7 @@ import json
 import os
 import time
 
-from fastapi import APIRouter
+from fastapi import Request, APIRouter
 from fastapi.responses import HTMLResponse
 
 from . import passive
@@ -162,6 +162,14 @@ def requests(limit: int = 100, route: str | None = None, result: str | None = No
                     "total_ms": g.get("duration_ms"), "steps": a["steps"], "route": (g.get("route") or {}).get("name"),
                     "caller": c.get("username") if isinstance(c, dict) else None, "prompt": prompt, "id": g.get("request_id")})
     return {"requests": out, "prompts_on": PROMPT_CHARS > 0}
+
+
+@router.get("/api/connect")
+def connect_info(request: Request):
+    """What a Kong needs to report here. Only reachable behind the front-door login on public installs."""
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or "localhost"
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    return {"ingest_url": f"{proto}://{host}/ingest/kong", "ingest_token": os.environ.get("INGEST_TOKEN", "")}
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
