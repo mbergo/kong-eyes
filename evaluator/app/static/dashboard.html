@@ -18,6 +18,10 @@ body { margin: 0; background: var(--ground); color: var(--ink); font: 15px/1.5 v
 main { max-width: 1240px; margin: 0 auto; padding: 20px 24px 64px; }
 header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 22px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
 header h1 { font: 600 20px var(--ui); margin: 0; letter-spacing: -.01em; }
+header nav { display: flex; gap: 6px; flex-wrap: wrap; } header nav a { font: 500 13px var(--ui); padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; color: inherit; text-decoration: none; }
+header nav a:hover, header nav a:focus-visible { border-color: currentColor; }
+#connect pre { overflow-x: auto; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; line-height: 1.5; }
+#connect p, #connect li { max-width: 72ch; } #connect button { font: 500 13px var(--ui); padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; background: none; color: inherit; cursor: pointer; }
 header .sp { flex: 1; } #stamp { color: var(--muted); font-size: 13px; }
 select, button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
 button { cursor: pointer; } button[aria-pressed="true"] { border-color: var(--ink); font-weight: 600; }
@@ -53,7 +57,9 @@ details { margin-top: 34px; } summary { cursor: pointer; font-weight: 600; } det
   <h1>Kong Eyes</h1>
   <label>Route <select id="route" aria-label="Route"></select></label>
   <span class="seg" id="win" role="group" aria-label="Time window"></span>
-  <span class="sp"></span><span id="stamp"></span>
+  <span class="sp"></span>
+  <nav aria-label="Pages"><a href="chain">3D live flow</a><a href="demo">Demo console</a><a href="#connect">Connect your Kong</a></nav>
+  <span id="stamp"></span>
 </header>
 <div id="err" role="alert"></div>
 <section id="plain" aria-live="polite"></section>
@@ -96,7 +102,29 @@ details { margin-top: 34px; } summary { cursor: pointer; font-weight: 600; } det
     <dt>Window</dt><dd>All numbers cover the last few minutes or hours you picked at the top, and slide forward as time passes.</dd>
   </dl>
 </details>
+<h2 id="connect">Connect your Kong</h2>
+<section>
+<p>One command on a machine that can reach your Kong's Admin API. It adds three plugins that already ship with Kong
+(nothing to install or build) to one route, and they report each request's outcome and timing here. Prompts are not sent.
+Your guardrail is not changed. <code>koe disconnect</code> removes everything it added.</p>
+<pre id="connect-cmd">loading…</pre>
+<p><button id="connect-copy" type="button">Copy the command</button></p>
+<ol>
+<li>Replace <code>YOUR_ROUTE</code> with the route the guardrail is on, and the Admin API address if it is not the usual one.</li>
+<li>Run it. It shows what it will add and asks before changing anything.</li>
+<li>Send traffic through that route, then pick the route in the selector at the top of this page.</li>
+</ol>
+</section>
 </main>
+<script>
+fetch('api/connect').then(r => r.json()).then(c => {
+  const cmd = 'git clone https://github.com/mbergo/kong-eyes && cd kong-eyes\n' +
+    'export KONG_ADMIN_URL=http://localhost:8001\n' +
+    'bin/koe connect --route YOUR_ROUTE \\\n  --ingest-url ' + c.ingest_url + (c.ingest_token ? ' \\\n  --ingest-token ' + c.ingest_token : '');
+  document.getElementById('connect-cmd').textContent = cmd;
+  document.getElementById('connect-copy').onclick = e => navigator.clipboard.writeText(cmd.replace(/\\\n\s*/g, '')).then(() => { e.target.textContent = 'Copied'; });
+}).catch(() => { document.getElementById('connect-cmd').textContent = 'Could not load the connection details.'; });
+</script>
 <script>
 (function () {
 "use strict";
