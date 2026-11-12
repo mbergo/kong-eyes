@@ -30,9 +30,9 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: 
 .hud { position: absolute; left: 16px; top: 12px; right: 16px; pointer-events: none; }
 .hud h1 { margin: 0; font-size: 17px; } .hud p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
 .hud a { pointer-events: auto; color: inherit; }
-.key { position: absolute; left: 16px; bottom: 12px; width: min(360px, calc(100% - 32px)); max-height: 60%; overflow-y: auto; font-size: 12px; line-height: 1.4;
+.key { position: absolute; left: 16px; right: 16px; bottom: 12px; max-height: 45%; overflow-y: auto; font-size: 12px; line-height: 1.4;
   border: 1px solid var(--hairline); border-radius: 6px; padding: 8px 12px; background: color-mix(in srgb, var(--ground) 88%, transparent); }
-.key summary { cursor: pointer; font-weight: 600; } .key dl { margin: 8px 0 2px; display: grid; gap: 6px; }
+.key summary { cursor: pointer; font-weight: 600; } .key dl { margin: 8px 0 2px; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px 18px; }
 .key dt { font-weight: 600; } .key dd { margin: 0; color: var(--muted); }
 .rail { border-left: 1px solid var(--hairline); background: transparent; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 h2 { margin: 0 0 6px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
@@ -58,14 +58,14 @@ th { color: var(--muted); font-weight: 400; }
     <div class="hud"><h1>Guardrail chain, live</h1><p id="sub">Requests enter on the left and pass each guardrail in the order Kong runs them. Drag to turn the view. <a href="dashboard">Back to the dashboard</a></p></div>
     <details class="key" open><summary>How to read this</summary>
       <dl>
-        <dt>A box</dt><dd>One guardrail (or another plugin on the route). Its name and numbers are written on it.</dd>
-        <dt>A taller box</dt><dd>That guardrail is slower. Height is the time 95 of 100 requests spend in it. The scale is compressed: one step up is about ten times slower.</dd>
-        <dt>A dot</dt><dd>One request. More dots at once means more requests per second right now.</dd>
-        <dt>A dot that changes colour and drops</dt><dd>The guardrail of that colour stopped it. Many drops at one box means that guardrail is stopping a lot.</dd>
-        <dt>A dot with a ring</dt><dd>It waited until the guardrail's time limit and was let through unchecked. Worth a look.</dd>
-        <dt>A dot that reaches the right</dt><dd>It was served by the model.</dd>
-        <dt>&ldquo;!&rdquo; after a name</dt><dd>There is a signal to investigate for that guardrail, listed on the right.</dd>
-        <dt>Small grey labels</dt><dd>Measuring points between guardrails. They only take timestamps.</dd>
+        <div><dt>A box</dt><dd>One guardrail (or another plugin on the route). Its name and numbers are written on it.</dd></div>
+        <div><dt>A taller box</dt><dd>That guardrail is slower. Height is the time 95 of 100 requests spend in it. The scale is compressed: one step up is about ten times slower.</dd></div>
+        <div><dt>A dot</dt><dd>One request. More dots at once means more requests per second right now.</dd></div>
+        <div><dt>A dot that changes colour and drops</dt><dd>The guardrail of that colour stopped it. Many drops at one box means that guardrail is stopping a lot.</dd></div>
+        <div><dt>A dot with a ring</dt><dd>It waited until the guardrail's time limit and was let through unchecked. Worth a look.</dd></div>
+        <div><dt>A dot that reaches the right</dt><dd>It was served by the model.</dd></div>
+        <div><dt>&ldquo;!&rdquo; after a name</dt><dd>There is a signal to investigate for that guardrail, listed on the right.</dd></div>
+        <div><dt>Small grey labels</dt><dd>Measuring points between guardrails. They only take timestamps.</dd></div>
       </dl>
     </details>
   </div>
