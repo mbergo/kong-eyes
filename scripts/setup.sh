@@ -2,6 +2,7 @@
 # One-command local setup: choose a destination, generate validated config, start the stack,
 # run a synthetic smoke test and print the stage-by-stage doctor report.
 #
+#   scripts/setup.sh --destination none|grafana|splunk|both     (none: only the collector and its own dashboard)
 #   scripts/setup.sh --destination grafana|splunk|both [--with-splunk-stub] [--no-start] [--route NAME]
 #
 # Idempotent: re-running keeps existing secrets in .env, regenerates derived files, restarts changed services.
@@ -21,7 +22,7 @@ while [[ $# -gt 0 ]]; do
     *) echo "unknown arg $1" >&2; exit 2;;
   esac
 done
-[[ "$DESTINATION" =~ ^(grafana|splunk|both)$ ]] || { echo "--destination must be grafana|splunk|both" >&2; exit 2; }
+[[ "$DESTINATION" =~ ^(none|grafana|splunk|both)$ ]] || { echo "--destination must be none|grafana|splunk|both" >&2; exit 2; }
 
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 ok()  { printf '  \033[1;32m[ok]\033[0m %s\n' "$*"; }
@@ -59,6 +60,7 @@ fi
 
 # Destinations
 PROFILES=""
+if [[ "$DESTINATION" == "none" ]]; then setenv OTLP_LOGS_ENDPOINT ""; fi
 case "$DESTINATION" in grafana|both)
   PROFILES="grafana"; setenv OTLP_LOGS_ENDPOINT "http://alloy:4318/v1/logs"
   [[ -n "$(getenv LOKI_WRITE_URL)" ]] || setenv LOKI_WRITE_URL "http://loki:3100/otlp"
@@ -147,5 +149,6 @@ scripts/doctor.sh || true
 echo
 say "Next: run the labeled suites"
 echo "   make run-suites        # all suites through Kong -> evaluator -> destinations"
-echo "   Grafana: http://localhost:${GRAFANA_PORT:-3000}  (admin/admin)  dashboard 'Guardrail Observer'"
+echo "   Dashboard: http://localhost:${EVALUATOR_PORT:-8800}/dashboard"
+[[ "$DESTINATION" == "none" || "$DESTINATION" == "splunk" ]] || echo "   Grafana: http://localhost:${GRAFANA_PORT:-3000}  dashboard 'Guardrail Observer'"
 echo "   Evaluator: http://localhost:${EVALUATOR_PORT:-8800}/runs   /doctor   /metrics"

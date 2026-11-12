@@ -6,3 +6,5 @@ __pycache__/
 /out/
 .build/ca.crt
 docker-compose.override.yml
+deploy/auth.caddy
+.front-door-password

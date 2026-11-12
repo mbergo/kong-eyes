@@ -473,6 +473,13 @@ async def passive_translate(window_s: float | None = None, include_runs: bool = 
     return doc
 
 
+@app.get("/", include_in_schema=False)
+async def home():
+    """The dashboard is the home page."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("dashboard", status_code=302)
+
+
 # the in-house dashboard and its API; see api.py
 api.store = store
 api.summary = _passive_summary
