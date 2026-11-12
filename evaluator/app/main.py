@@ -22,7 +22,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from . import adjudicate as adj
-from . import demo, ingest, metrics, passive, translate
+from . import api, demo, ingest, metrics, passive, translate
 from .exporters import metrics_hooks
 from .exporters.otlp import OtlpConfig, OtlpLogs
 from .exporters.splunk import SplunkConfig, SplunkHEC
@@ -52,19 +52,7 @@ app = FastAPI(title="guardrail-evaluator", version=VERSION)
 EXPORT_PROMPT_CHARS = int(os.environ.get("EXPORT_PROMPT_CHARS", "0") or 0)
 
 
-def _prompt_excerpt(body_prefix: str, limit: int) -> str | None:
-    """Last user message from a (possibly truncated) chat-completions body, cut to `limit` characters."""
-    try:
-        msgs = json.loads(body_prefix).get("messages") or []
-        users = [m.get("content") for m in msgs if isinstance(m, dict) and m.get("role") == "user" and isinstance(m.get("content"), str)]
-        text = users[-1] if users else None
-    except Exception:
-        i = body_prefix.rfind('"content":')            # body was cut mid-JSON: take what follows the last content key
-        text = body_prefix[i + 10:].lstrip(' "') if i >= 0 else None
-    if not text:
-        return None
-    text = " ".join(text.split())
-    return text[:limit] + ("…" if len(text) > limit else "")
+_prompt_excerpt = passive.prompt_excerpt
 
 DESTINATIONS: dict[str, OutboxWorker] = {}
 
@@ -179,7 +167,8 @@ def _observation_export_view(gro: dict) -> dict:
     v["request"] = {k: req.get(k) for k in ("method", "path", "body_bytes", "body_sha256", "stream_requested", "model", "message_count", "prompt_chars", "json_valid", "body_in_file")}
     if EXPORT_PROMPT_CHARS > 0 and req.get("body_prefix"):
         v["request"]["prompt_excerpt"] = _prompt_excerpt(req["body_prefix"], EXPORT_PROMPT_CHARS)
-    v["apm"] = passive.apm_view(gro)
+    apm = passive.apm_view(gro)
+    v["apm"] = {k: apm[k] for k in ("result", "path", "stopped_by")}
     for key in ("stream", "tail"):
         s = gro.get(key) or {}
         v[key] = {k: s.get(k) for k in ("chunks", "bytes", "sha256", "first_chunk_at_ms", "eof_at_ms", "truncated", "observed_at")} if s else None
@@ -483,6 +472,12 @@ async def passive_translate(window_s: float | None = None, include_runs: bool = 
     _fanout(ev)
     return doc
 
+
+# the in-house dashboard and its API; see api.py
+api.store = store
+api.summary = _passive_summary
+api.latest_findings = lambda: (store.latest_findings(1) or [None])[0]
+app.include_router(api.router)
 
 # separate, demo-only console (404 unless DEMO_CONSOLE=true); see demo.py
 demo.translate_now = passive_translate

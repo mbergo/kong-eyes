@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kong Eyes</title>
+<style>
+/* One page that answers "is the guardrail doing its job?" for someone who has never opened Kong.
+   Colour means one thing each: teal reached the model, crimson was stopped, amber waited and was let through.
+   Panels are outlined, never filled; only data marks carry fill. */
+:root { --ground:#EEF1F4; --ink:#14213D; --muted:#56627A; --line:#C4CDD9; --served:#0E8F7E; --stopped:#C8324A; --waited:#A66A12; --guard:#4353C4; --other:#7D8798;
+  --read: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif; --ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif; }
+@media (prefers-color-scheme: dark) { :root { color-scheme: dark; --ground:#0F1522; --ink:#E6EAF2; --muted:#9AA6BC; --line:#2C374B; --served:#3CCFBA; --stopped:#FF7A8C; --waited:#F2B95C; --guard:#97A3FF; --other:#8792A8; } }
+:root[data-theme="dark"] { color-scheme: dark; --ground:#0F1522; --ink:#E6EAF2; --muted:#9AA6BC; --line:#2C374B; --served:#3CCFBA; --stopped:#FF7A8C; --waited:#F2B95C; --guard:#97A3FF; --other:#8792A8; }
+:root[data-theme="light"] { color-scheme: light; --ground:#EEF1F4; --ink:#14213D; --muted:#56627A; --line:#C4CDD9; --served:#0E8F7E; --stopped:#C8324A; --waited:#A66A12; --guard:#4353C4; --other:#7D8798; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--ink); font: 15px/1.5 var(--ui); font-variant-numeric: tabular-nums; }
+main { max-width: 1240px; margin: 0 auto; padding: 20px 24px 64px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 22px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+header h1 { font: 600 20px var(--ui); margin: 0; letter-spacing: -.01em; }
+header .sp { flex: 1; } #stamp { color: var(--muted); font-size: 13px; }
+select, button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
+button { cursor: pointer; } button[aria-pressed="true"] { border-color: var(--ink); font-weight: 600; }
+select:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--guard); outline-offset: 2px; }
+.seg { display: inline-flex; gap: 6px; }
+#plain { font: 400 22px/1.42 var(--read); max-width: 62ch; margin: 26px 0 6px; }
+#plain p { margin: 0 0 .5em; } #plain .n { font-weight: 700; }
+.served { color: var(--served); } .stopped { color: var(--stopped); } .waited { color: var(--waited); } .guard { color: var(--guard); }
+h2 { font: 600 16px var(--ui); margin: 38px 0 4px; } h2 + .sub { color: var(--muted); margin: 0 0 12px; max-width: 78ch; font-size: 14px; }
+.panel { border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; }
+#flow svg { width: 100%; height: auto; display: block; } #flow text { font: 13px var(--ui); fill: var(--ink); } #flow .small { font-size: 12px; fill: var(--muted); }
+.guards { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; }
+.g { border-left: 4px solid var(--guard); }
+.g h3 { margin: 0; font: 600 17px var(--ui); color: var(--guard); } .g .big { font: 600 34px/1.1 var(--ui); margin: 6px 0 2px; }
+.g dl { display: grid; grid-template-columns: 1fr auto; gap: 7px 14px; margin: 12px 0 0; } .g dt { color: var(--muted); } .g dd { margin: 0; text-align: right; font-weight: 600; }
+.g .why { grid-column: 1 / -1; font-size: 13px; color: var(--muted); margin: -4px 0 4px; }
+.two { display: grid; grid-template-columns: 3fr 2fr; gap: 14px; } @media (max-width: 900px) { .two { grid-template-columns: 1fr; } #plain { font-size: 19px; } }
+.chart svg { display: block; max-width: 100%; } .chart text { font: 11.5px var(--ui); fill: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; margin-top: 6px; } .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+.look { display: grid; gap: 10px; } .look .panel { border-left: 4px solid var(--waited); } .look .info { border-left-color: var(--other); }
+.look h3 { margin: 0 0 4px; font: 600 15px var(--ui); } .look p { margin: 2px 0; max-width: 86ch; } .look .k { color: var(--muted); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; } th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; } td.num { text-align: right; white-space: nowrap; } td.t { white-space: nowrap; color: var(--muted); }
+td.p { max-width: 46ch; } .steps { white-space: nowrap; } .steps b { font-weight: 600; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; } .empty { color: var(--muted); padding: 14px 0; }
+details { margin-top: 34px; } summary { cursor: pointer; font-weight: 600; } details dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; max-width: 90ch; } details dt { font-weight: 600; } details dd { margin: 0; color: var(--muted); }
+#err { color: var(--stopped); margin-top: 10px; }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Kong Eyes</h1>
+  <label>Route <select id="route" aria-label="Route"></select></label>
+  <span class="seg" id="win" role="group" aria-label="Time window"></span>
+  <span class="sp"></span><span id="stamp"></span>
+</header>
+<div id="err" role="alert"></div>
+<section id="plain" aria-live="polite"></section>
+
+<h2>Where the requests went</h2>
+<p class="sub">Read it left to right. The band is every request that came in; its thickness is how many. What a guardrail stops falls away below it. What is left on the right reached the model.</p>
+<div class="panel" id="flow"></div>
+
+<h2>Each guardrail</h2>
+<p class="sub">A guardrail is a checkpoint in front of the model. These are measurements of what it did, not a verdict on whether it was right.</p>
+<div class="guards" id="guards"></div>
+
+<h2>Over time</h2>
+<p class="sub">Each bar is a slice of the window. A colour that suddenly grows is something starting to happen: an attack, a guardrail slowing down, or a rule catching more than before.</p>
+<div class="two">
+  <div class="panel chart"><div id="c1"></div><div class="legend" id="l1"></div></div>
+  <div class="panel chart"><div id="c2"></div><div class="legend" id="l2"></div></div>
+</div>
+
+<h2>Worth a look</h2>
+<p class="sub">Patterns in the numbers that deserve a person's attention. Each one says what was seen, what it could mean, and what to check. None of them proves a fault.</p>
+<div class="look" id="look"></div>
+
+<h2>Requests, one by one</h2>
+<p class="sub" id="reqsub"></p>
+<div class="panel">
+  <div class="tools"><span class="seg" id="filter" role="group" aria-label="Show"></span><button id="pause" aria-pressed="false">Pause the list</button></div>
+  <div id="reqs"></div>
+</div>
+
+<details>
+  <summary>What the words mean</summary>
+  <dl>
+    <dt>Request</dt><dd>One question sent to the AI model through the gateway.</dd>
+    <dt>Guardrail</dt><dd>A checkpoint that reads each request before the model sees it and can stop it.</dd>
+    <dt>Stopped</dt><dd>The gateway refused the request. It never reached the model.</dd>
+    <dt>Waited, then let through</dt><dd>The guardrail took about as long as its time limit and the request went on. This is what a guardrail that fails open looks like from outside, so the request may not have been checked. It can also be a guardrail that was simply slow and did answer.</dd>
+    <dt>Time in the guardrail</dt><dd>How long the checkpoint held a request. "Typical" is the middle request; "slowest 5%" is what the unlucky ones saw.</dd>
+    <dt>Tried again and got through</dt><dd>A caller was stopped, changed the wording, and passed. Either an honest person rephrasing after a wrong stop, or someone stepping around the rule. Reading a few of those requests tells you which.</dd>
+    <dt>Window</dt><dd>All numbers cover the last few minutes or hours you picked at the top, and slide forward as time passes.</dd>
+  </dl>
+</details>
+</main>
+<script>
+(function () {
+"use strict";
+var $ = function (id) { return document.getElementById(id); }, NS = "http://www.w3.org/2000/svg";
+var qs = new URLSearchParams(location.search), th = qs.get("theme"); if (th === "dark" || th === "light") document.documentElement.setAttribute("data-theme", th);
+var WINDOWS = [[60, "1 min"], [300, "5 min"], [3600, "1 hour"], [21600, "6 hours"]];
+var st = { window_s: +qs.get("window_s") || 300, route: qs.get("route") || "", filter: "", paused: false, ov: null };
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function el(tag, attrs, text) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
+function h(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function n(x) { return (x || 0).toLocaleString(); }
+function pct(x) { return x == null ? "n/a" : (x * 100 < 10 && x > 0 ? (x * 100).toFixed(1) : Math.round(x * 100)) + "%"; }
+function ms(x) { return x == null ? "n/a" : (x >= 1000 ? (x / 1000).toFixed(1) + " s" : Math.round(x) + " ms"); }
+function get(path) { return fetch(path).then(function (r) { if (!r.ok) throw new Error(path + " answered " + r.status); return r.json(); }); }
+function colorFor(name, i) { if (name === "served") return css("--served"); if (name.indexOf("waited") === 0) return css("--waited"); if (name === "unknown" || name === "gateway error") return css("--other");
+  return [css("--stopped"), "#8E55D9", "#C96A1B", "#2F7FD1"][i % 4]; }
+
+function controls() {
+  var w = $("win"); w.innerHTML = "";
+  WINDOWS.forEach(function (x) { var b = h("button", "", x[1]); b.setAttribute("aria-pressed", st.window_s === x[0] ? "true" : "false");
+    b.onclick = function () { st.window_s = x[0]; controls(); load(); }; w.appendChild(b); });
+  var f = $("filter"); f.innerHTML = "";
+  [["", "All"], ["stopped", "Stopped"], ["waited", "Waited"], ["served", "Reached the model"]].forEach(function (x) { var b = h("button", "", x[1]);
+    b.setAttribute("aria-pressed", st.filter === x[0] ? "true" : "false"); b.onclick = function () { st.filter = x[0]; controls(); loadReqs(); }; f.appendChild(b); });
+}
+function plain(o) {
+  var p = $("plain"); p.innerHTML = "";
+  o.plain.forEach(function (line) { var e = h("p"); line.split(/(\d[\d,.]*%?)/).forEach(function (part, i) { e.appendChild(i % 2 ? h("span", "n", part) : document.createTextNode(part)); }); p.appendChild(e); });
+}
+function flow(o) {
+  var box = $("flow"); box.innerHTML = "";
+  var t = o.totals, gs = o.guardrails;
+  if (!t.requests) { box.appendChild(h("div", "empty", "No requests in this window. Send some traffic through the route, or pick a longer window.")); return; }
+  var W = 1160, top = 46, H = 120, scale = H / t.requests, svg = el("svg", { viewBox: "0 0 " + W + " 300", role: "img", "aria-label": "Flow of requests through the guardrails" });
+  var before = t.stopped_elsewhere || 0;      // stops that no guardrail made: a wrong key, a rate limit
+  var stages = []; if (before) stages.push({ label: "Not a guardrail", stopped: before, in_: t.requests, c: css("--other"), plain: "for example a wrong key or a rate limit" });
+  gs.forEach(function (g) { stages.push({ label: g.label, stopped: g.stopped, in_: g.reached, waited: g.fail_open, c: css("--guard"), guard: true }); });
+  var x0 = 150, x1 = W - 190, step = stages.length ? (x1 - x0) / stages.length : 0, alive = t.requests, x = 20;
+  svg.appendChild(el("text", { x: 20, y: 24, "font-weight": 600 }, "Came in")); svg.appendChild(el("text", { x: 20, y: 40, class: "small" }, n(t.requests) + " requests"));
+  function band(xa, xb, count, color, op) { svg.appendChild(el("rect", { x: xa, y: top + 10, width: Math.max(0, xb - xa), height: Math.max(1.5, count * scale), fill: color, opacity: op })); }
+  stages.forEach(function (s, i) {
+    var gx = x0 + step * i + step / 2, hin = Math.max(1.5, alive * scale), out = Math.max(0, alive - s.stopped), hout = Math.max(out ? 1.5 : 0, out * scale);
+    band(x, gx, alive, css("--served"), .55);
+    if (s.stopped) {   // the stopped part falls away below the band
+      var ya = top + 10 + hout, yb = top + 10 + hin, d = "M" + gx + " " + ya + " C" + (gx + 50) + " " + ya + " " + (gx + 30) + " 232 " + (gx + 78) + " 232 L" + (gx + 78) + " " + (232 + Math.max(3, (yb - ya))) +
+        " C" + (gx + 20) + " " + (232 + Math.max(3, (yb - ya))) + " " + (gx + 40) + " " + yb + " " + gx + " " + yb + " Z";
+      svg.appendChild(el("path", { d: d, fill: css("--stopped"), opacity: .6 }));
+      svg.appendChild(el("text", { x: gx + 86, y: 240, fill: css("--stopped"), "font-weight": 600, style: "fill:" + css("--stopped") }, n(s.stopped) + " stopped"));
+      svg.appendChild(el("text", { x: gx + 86, y: 256, class: "small" }, s.guard ? pct(s.in_ ? s.stopped / s.in_ : 0) + " of what it saw" : s.plain));
+    }
+    if (s.waited) { svg.appendChild(el("rect", { x: gx + 4, y: top + 10, width: 46, height: Math.max(2, s.waited * scale), fill: css("--waited"), opacity: .9 }));
+      svg.appendChild(el("text", { x: gx + 8, y: top + 2, style: "fill:" + css("--waited"), "font-weight": 600 }, n(s.waited) + " waited, let through")); }
+    svg.appendChild(el("rect", { x: gx - 5, y: top, width: 10, height: H + 20, fill: "none", stroke: s.c, "stroke-width": 2, rx: 3 }));
+    svg.appendChild(el("text", { x: gx, y: top - (s.waited ? 22 : 10), "text-anchor": "middle", "font-weight": 600, style: "fill:" + s.c }, s.label));
+    alive = out; x = gx;
+  });
+  band(x, W - 180, alive, css("--served"), .55);
+  svg.appendChild(el("text", { x: W - 170, y: top + 28, "font-weight": 600, style: "fill:" + css("--served") }, "Reached the model"));
+  svg.appendChild(el("text", { x: W - 170, y: top + 46, class: "small" }, n(alive) + " requests, " + pct(alive / t.requests)));
+  box.appendChild(svg);
+}
+function guards(o) {
+  var box = $("guards"); box.innerHTML = "";
+  if (!o.guardrails.length) { box.appendChild(h("div", "empty", "No guardrail was seen on this route in this window.")); return; }
+  o.guardrails.forEach(function (g) {
+    var c = h("div", "panel g"); c.appendChild(h("h3", "", g.label));
+    var big = h("div", "big"); big.appendChild(h("span", g.stopped_share >= .3 ? "stopped" : "", pct(g.stopped_share))); big.appendChild(h("span", "", " stopped")); big.lastChild.style.cssText = "font-size:16px;font-weight:400;color:var(--muted)"; c.appendChild(big);
+    var dl = h("dl");
+    function row(k, v, why, cls) { dl.appendChild(h("dt", "", k)); var d = h("dd", cls || "", v); dl.appendChild(d); if (why) dl.appendChild(h("div", "why", why)); }
+    row("Requests it looked at", n(g.reached)); row("Requests it stopped", n(g.stopped));
+    row("Typical time it takes", ms(g.time_ms.median), "Slowest 5%: " + ms(g.time_ms.p95) + (g.timeout_ms ? ". Its time limit is " + ms(g.timeout_ms) + "." : ".") + (g.exact_timing ? "" : " It shares a measuring point with another plugin, so this time is not exact."));
+    row("Waited, then let through", n(g.fail_open), g.fail_open ? "They took about as long as its time limit and went on. They may not have been checked: look at the guardrail's backend and at what it is set to do when it times out." : "None in this window.", g.fail_open ? "waited" : "");
+    if (g.retries_after_stop) row("Stopped callers who tried again", n(g.retries_after_stop), n(g.retries_got_through) + " of them got through on the next try. Read a few to see whether they were honest rewordings or someone stepping around the rule.", g.retries_got_through ? "waited" : "");
+    if (g.flagged_but_served) row("Flagged but still answered", n(g.flagged_but_served), "It saw a problem and the caller got the answer anyway. Normal if it is set to watch only.", "waited");
+    if (g.rewrites) row("Requests it changed", n(g.rewrites), "The text was different after the guardrail than before it, for example something masked.");
+    c.appendChild(dl); box.appendChild(c);
+  });
+}
+function axis(svg, W, H, max, fmt, start, step, nb) {
+  [0, .5, 1].forEach(function (f) { var y = 10 + (H - 34) * (1 - f); svg.appendChild(el("line", { x1: 40, x2: W, y1: y, y2: y, stroke: css("--line"), "stroke-width": 1 }));
+    svg.appendChild(el("text", { x: 36, y: y + 4, "text-anchor": "end" }, fmt(max * f))); });
+  [0, .5, 1].forEach(function (f) { var t = new Date(start + step * nb * f); svg.appendChild(el("text", { x: 40 + (W - 40) * f, y: H - 4, "text-anchor": f === 0 ? "start" : f === 1 ? "end" : "middle" },
+    t.toLocaleTimeString([], st.window_s > 600 ? { hour: "2-digit", minute: "2-digit" } : { hour: "2-digit", minute: "2-digit", second: "2-digit" }))); });
+}
+function charts(ts) {
+  var c1 = $("c1"), l1 = $("l1"); c1.innerHTML = ""; l1.innerHTML = "";
+  var W = Math.max(300, c1.clientWidth), H = 220, nb = ts.buckets, bw = (W - 40) / nb;
+  var tot = []; for (var i = 0; i < nb; i++) { tot[i] = 0; ts.outcomes.forEach(function (o) { tot[i] += o.values[i] || 0; }); }
+  var max = Math.max.apply(null, tot.concat([1])), svg = el("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, role: "img", "aria-label": "What happened to requests over time" });
+  axis(svg, W, H, max, function (v) { return Math.round(v); }, ts.start_ms, ts.step_ms, nb);
+  var stoppedIdx = 0;
+  ts.outcomes.forEach(function (o) { o.color = colorFor(o.name, o.name.indexOf("stopped") === 0 ? stoppedIdx++ : 0); });
+  for (var b = 0; b < nb; b++) { var y = 10 + (H - 34); ts.outcomes.forEach(function (o) { var v = o.values[b] || 0; if (!v) return; var hh = v / max * (H - 34); y -= hh;
+    svg.appendChild(el("rect", { x: 40 + b * bw + .5, y: y, width: Math.max(1, bw - 1), height: hh, fill: o.color })); }); }
+  c1.appendChild(svg);
+  ts.outcomes.forEach(function (o) { var s = h("span"); var i = h("i"); i.style.background = o.color; s.appendChild(i);
+    s.appendChild(document.createTextNode((o.name === "served" ? "reached the model" : o.name) + ": " + n(o.values.reduce(function (a, c) { return a + c; }, 0)))); l1.appendChild(s); });
+  if (!ts.outcomes.length) l1.textContent = "No requests in this window.";
+
+  var c2 = $("c2"), l2 = $("l2"); c2.innerHTML = ""; l2.innerHTML = "";
+  W = Math.max(300, c2.clientWidth); bw = (W - 40) / nb;
+  var lines = [["Whole gateway, typical (ms)", ts.gateway_ms.median, css("--other")], ["Whole gateway, slowest 5% (ms)", ts.gateway_ms.p95, css("--ink")], ["In the guardrail, slowest 5% (ms)", ts.guardrail_ms.p95, css("--guard")]];
+  var m2 = 1; lines.forEach(function (l) { l[1].forEach(function (v) { if (v != null && v > m2) m2 = v; }); });
+  var s2 = el("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, role: "img", "aria-label": "How long requests took over time" });
+  axis(s2, W, H, m2, function (v) { return Math.round(v); }, ts.start_ms, ts.step_ms, nb);
+  lines.forEach(function (l) { var d = "", pen = false; l[1].forEach(function (v, i) { if (v == null) { pen = false; return; } var x = 40 + (i + .5) * bw, y = 10 + (H - 34) * (1 - v / m2); d += (pen ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1); pen = true; });
+    if (d) s2.appendChild(el("path", { d: d, fill: "none", stroke: l[2], "stroke-width": 2, "stroke-linejoin": "round" }));
+    var s = h("span"); var i = h("i"); i.style.background = l[2]; s.appendChild(i); s.appendChild(document.createTextNode(l[0])); l2.appendChild(s); });
+  c2.appendChild(s2);
+}
+function look(o) {
+  var box = $("look"); box.innerHTML = "";
+  if (!o.signals.length) box.appendChild(h("div", "empty", "Nothing stands out on this route in this window."));
+  o.signals.forEach(function (s) { var c = h("div", "panel" + (s.severity === "warn" ? "" : " info")); c.appendChild(h("h3", "", (s.kind || "").replace(/[_:]/g, " ")));
+    c.appendChild(h("p", "", s.summary)); box.appendChild(c); });
+  // the written findings cover the whole gateway at the time they were written, so they sit beside this route's patterns and never replace them
+  var f = o.findings;
+  if (f && f.items.length && f.provider && f.provider.indexOf("stub") < 0 && Date.now() - f.generated_at_ms < 15 * 60000) {
+    box.appendChild(h("p", "sub", "In plain language, for the whole gateway, written by " + f.provider + " at " + new Date(f.generated_at_ms).toLocaleTimeString() + " from the totals only (no request text was sent):"));
+    f.items.forEach(function (x) { var c = h("div", "panel" + (x.severity === "warn" ? "" : " info")); c.appendChild(h("h3", "", x.title));
+      [["Seen", x.observed], ["Could mean", x.could_mean], ["Check", x.next_check]].forEach(function (y) { if (!y[1]) return; var p = h("p"); p.appendChild(h("span", "k", y[0] + ": ")); p.appendChild(document.createTextNode(y[1])); c.appendChild(p); }); box.appendChild(c); });
+  }
+}
+function reqs(d) {
+  var box = $("reqs"); box.innerHTML = "";
+  $("reqsub").textContent = d.prompts_on ? "The newest requests, with what happened to each, how long each checkpoint held it, and the start of what was asked."
+    : "The newest requests, with what happened to each and how long each checkpoint held it. The text of requests is not being collected, so the last column is empty.";
+  if (!d.requests.length) { box.appendChild(h("div", "empty", "No requests match.")); return; }
+  var t = h("table"), hr = h("tr"); ["Time", "What happened", "Total", "Time at each checkpoint", "Asked by", "What was asked"].forEach(function (x) { hr.appendChild(h("th", "", x)); }); t.appendChild(hr);
+  d.requests.forEach(function (r) { var tr = h("tr"); tr.appendChild(h("td", "t", new Date(r.at_ms).toLocaleTimeString()));
+    var cls = r.result === "served" ? "served" : r.result.indexOf("waited") === 0 ? "waited" : r.result.indexOf("stopped") === 0 ? "stopped" : ""; var w = h("td", cls, r.result === "served" ? "reached the model" : r.result); w.style.fontWeight = 600; tr.appendChild(w);
+    tr.appendChild(h("td", "num", ms(r.total_ms)));
+    var s = h("td", "steps"); r.steps.forEach(function (x, i) { if (i) s.appendChild(document.createTextNode("  ›  ")); var b = h("b", x.stopped ? "stopped" : "", x.plugin); s.appendChild(b); s.appendChild(document.createTextNode(" " + ms(x.ms) + (x.stopped ? ", stopped here" : ""))); }); tr.appendChild(s);
+    tr.appendChild(h("td", "", r.caller || "")); tr.appendChild(h("td", "p", r.prompt || "")); t.appendChild(tr); });
+  box.appendChild(t);
+}
+function loadReqs() { if (st.paused) return; get("api/requests?limit=60" + (st.ov && st.ov.route ? "&route=" + encodeURIComponent(st.ov.route) : "") + (st.filter ? "&result=" + st.filter : "")).then(reqs).catch(fail); }
+function fail(e) { $("err").textContent = "Could not reach the collector: " + e.message; }
+var seq = 0;
+function load() {
+  var mine = ++seq, q = "window_s=" + st.window_s + (st.route ? "&route=" + encodeURIComponent(st.route) : "");
+  get("api/overview?" + q).then(function (o) { if (mine !== seq) return null;      // a newer load started: drop this answer
+    st.ov = o; $("err").textContent = "";
+    var sel = $("route"), cur = o.route; if (document.activeElement !== sel) { sel.innerHTML = ""; o.routes.forEach(function (r) { var op = h("option", "", r.name + " (" + n(r.requests) + ")"); op.value = r.name; if (r.name === cur) op.selected = true; sel.appendChild(op); }); }
+    $("stamp").textContent = "Updated " + new Date(o.generated_at_ms).toLocaleTimeString();
+    plain(o); flow(o); guards(o); look(o);
+    return get("api/timeseries?window_s=" + st.window_s + "&buckets=60" + (o.route ? "&route=" + encodeURIComponent(o.route) : "")); }).then(function (ts) { if (!ts || mine !== seq) return; charts(ts); loadReqs(); }).catch(fail);
+}
+$("route").onchange = function () { st.route = this.value; load(); };
+$("pause").onclick = function () { st.paused = !st.paused; this.setAttribute("aria-pressed", st.paused ? "true" : "false"); this.textContent = st.paused ? "Resume the list" : "Pause the list"; if (!st.paused) loadReqs(); };
+controls(); load(); setInterval(function () { if (!document.hidden) load(); }, st.window_s <= 300 ? 3000 : 10000);
+})();
+</script>
+</body>
+</html>
