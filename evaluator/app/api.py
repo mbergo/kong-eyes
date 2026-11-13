@@ -64,7 +64,7 @@ def overview(window_s: float = 300, route: str | None = None):
         s = summary(window_s, chosen, False)
     r = s["routes"].get(chosen) or {}
     order = [c["name"] for c in r.get("chain", []) if c["kind"] in ("guardrail", "candidate")]
-    labels = {c["name"]: c.get("label") or c["name"] for c in r.get("chain", [])}
+    shown = {c["name"]: c.get("label") or c["name"] for c in r.get("chain", [])}       # the name each plugin is shown under
     guards = []
     for name in order:
         g = s["guardrails"].get(name)
@@ -74,7 +74,7 @@ def overview(window_s: float = 300, route: str | None = None):
         stopped = g.get("blocked") or 0                    # only what ended the request; a redaction lets it continue
         lat = g.get("latency_ms") or {}
         ab = (s.get("after_block") or {}).get(name) or {}
-        guards.append({"name": name, "label": labels.get(name, name), "reached": reached, "stopped": stopped, "stopped_share": _pct(stopped, reached),
+        guards.append({"name": name, "label": shown.get(name, name), "reached": reached, "stopped": stopped, "stopped_share": _pct(stopped, reached),
                        "time_ms": {"median": lat.get("p50"), "p95": lat.get("p95"), "max": lat.get("max")}, "timeout_ms": g.get("timeout_ms"),
                        "fail_open": g.get("fail_open_suspects") or 0, "no_decision": g.get("no_verdict") or 0,
                        "flagged_but_served": g.get("detected_not_enforced") or 0,

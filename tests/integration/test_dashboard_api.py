@@ -146,3 +146,12 @@ def test_the_dashboard_is_one_screen_with_gateways_on_the_left_and_tabs_for_the_
         assert piece in page, piece
     with OPEN.open(EVAL + "/fonts/space-grotesk-latin.woff2", timeout=30) as r:                       # the typefaces come from the collector itself
         assert r.headers["Content-Type"] == "font/woff2" and r.read(4) == b"wOF2"
+
+
+def test_the_overview_still_answers_once_plain_language_findings_exist(traffic):
+    req = urllib.request.Request(f"{EVAL}/passive/translate?provider=stub", data=b"{}", method="POST",
+                                 headers={"Content-Type": "application/json", "Authorization": "Bearer " + ENV["RUNNER_TOKEN"]})
+    with OPEN.open(req, timeout=60) as r:
+        assert r.status == 200
+    o = get(f"/api/overview?window_s=60&route={ROUTE}")
+    assert o["findings"] and "headline" in o["findings"] and o["guardrails"]
