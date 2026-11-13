@@ -139,7 +139,7 @@ function readings(r) {
     var g = data.guardrails[n], ab = (data.after_block || {})[n] || {}, stopped = (g.blocked || 0) + (g.enforced_inline || 0), passed = Math.max(0, (g.reached || 0) - stopped), later = 0, laterBy = [];
     names.slice(i + 1).forEach(function (m) { var x = data.guardrails[m], k = (x.blocked || 0) + (x.enforced_inline || 0); if (k) { later += k; laterBy.push(m); } });
     var lat = g.latency_ms || {}, notes = [], over = false, under = false, retry = ab.followed_by_retry || 0, through = ab.retry_got_through || 0;
-    if ((g.reached || 0) >= 20 && g.intervention_rate >= 0.2) { over = true; notes.push("It stops " + pct(g.intervention_rate) + " of what it sees, which is a lot. Read a few of the stopped requests to see whether they were honest."); }
+    if ((g.reached || 0) >= 20 && g.intervention_rate >= 0.15) { over = true; notes.push("It stops " + pct(g.intervention_rate) + " of what it sees, which is a lot. Read a few of the stopped requests to see whether they were honest."); }
     if (retry >= 5 && through / retry >= 0.3) { over = true; notes.push(through + " of " + retry + " stopped callers got through on their next try. Honest rewordings mean over-flagging; tricks mean the rule is easy to step around."); }
     if (g.fail_open_suspects > 0) { under = true; notes.push(g.fail_open_suspects + " request(s) waited for its time limit and went through unchecked."); }
     if (passed >= 20 && later / passed >= 0.05) { under = true; notes.push(later + " request(s) it let through were then stopped by " + laterBy.join(" and ") + "."); }
@@ -176,7 +176,7 @@ function build() {
     if ((c.kind === "guardrail" || c.kind === "candidate") && g && g.latency_ms) {
       var p95 = g.latency_ms && g.latency_ms.p95;
       h = 0.7 + Math.min(5, Math.log(1 + (p95 || 0)) / Math.LN10 * 1.6);
-      sub = (rd[c.name] ? "guardrail " + rd[c.name].pos + " of " + rd[c.name].of + " · " : c.kind === "candidate" ? "found on the route · " : "") + "stops " + pct(g.intervention_rate) + " · adds " + ms(g.latency_ms.p50);
+      sub = (rd[c.name] ? "guardrail " + rd[c.name].pos + " of " + rd[c.name].of + " · " : c.kind === "candidate" ? "found on the route · " : "") + "stops " + pct(g.intervention_rate) + " · adds " + ms(g.latency_ms.p50) + (g.latency_ms.p95 > 2 * (g.latency_ms.p50 || 0) + 5 ? ", " + ms(g.latency_ms.p95) + " when slow" : "");
     } else if (c.kind === "router") { h = 1.0; sub = "hands the request to the model"; }
     else if (c.kind === "end") { h = 0.8; sub = "requests come in here"; }
     else if (c.kind === "end2") { h = 0.8; sub = "answered requests end here"; }
