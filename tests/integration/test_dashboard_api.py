@@ -137,3 +137,12 @@ def test_a_guardrail_can_be_given_a_name_and_every_view_uses_it(traffic):
     page = get("/dashboard", raw=True)
     assert "chain?route=" in page and "Rename" in page
     assert 'QS.get("route")' in get("/chain", raw=True)
+
+
+def test_the_dashboard_is_one_screen_with_gateways_on_the_left_and_tabs_for_the_detail():
+    page = get("/dashboard", raw=True)
+    for piece in ("Gateways reporting here", "Guardrails, in the order Kong runs them", "Worth a look", 'id="tabs"', "Requests, one by one", "Over time",
+                  "What the words mean", 'id="tab-connect"', 'id="kpis"', 'id="flowbar"'):
+        assert piece in page, piece
+    with OPEN.open(EVAL + "/fonts/space-grotesk-latin.woff2", timeout=30) as r:                       # the typefaces come from the collector itself
+        assert r.headers["Content-Type"] == "font/woff2" and r.read(4) == b"wOF2"
