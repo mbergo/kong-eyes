@@ -8,6 +8,8 @@ through independent durable queues.
 from __future__ import annotations
 
 import asyncio
+import collections
+import threading
 import base64
 import csv
 import io
@@ -119,7 +121,7 @@ async def ingest_kong(request: Request):
         metrics_hooks.ingest_result("kong", "rejected")
         raise HTTPException(400, str(e))
     accepted = dup = skipped = bad = 0
-    seen_routes, seen_envs, seen_versions = set(), set(), set()
+    seen = []
     for ev in events:
         try:
             gro = ingest.extract_observer(ev, NAMESPACE)
@@ -128,7 +130,8 @@ async def ingest_kong(request: Request):
                 continue
             gro["ts"] = gro.get("started_at_ms")
             gro["route_name"] = (gro.get("route") or {}).get("name")
-            seen_routes.add(gro["route_name"]); seen_envs.add(gro.get("environment")); seen_versions.add(gro.get("kong_version"))
+            seen.append({"route": gro["route_name"], "environment": gro.get("environment"), "kong_version": gro.get("kong_version"),
+                         "gateway": gro.get("gateway"), "model": gateways.model_of(gro)})
             if store.insert_kong_observation(gro, ev):
                 accepted += 1
                 if EXPORT_OBSERVATIONS:
@@ -140,7 +143,7 @@ async def ingest_kong(request: Request):
             bad += 1
             log.warning("malformed observation skipped: %s", e)
             store.log_ingest("kong", "rejected", str(e)[:200]); metrics_hooks.ingest_result("kong", "rejected")
-    gateways.note(request, accepted + dup, seen_routes, seen_envs, seen_versions)
+    gateways.note(request, seen)
     store.log_ingest("kong", "accepted", str(accepted))
     metrics_hooks.ingest_result("kong", "accepted", accepted)
     if dup:
@@ -393,13 +396,29 @@ async def smoke(wait_s: float = 10.0):
 
 
 # ------------------------------------------------------- ordinary traffic (no labels)
+_SUMMARIES: dict = {}
+_SUMMARY_LOCKS: dict = collections.defaultdict(threading.Lock)
+
+
 def _passive_summary(window_s: float | None, route: str | None, include_runs: bool) -> dict:
+    # Pages poll this every few seconds and several people may have one open: one computation is shared for a moment
     w = window_s or PASSIVE_WINDOW_S
-    since = int((time.time() - w) * 1000)
-    s = passive.summarize(store.observations_since(since, include_runs=include_runs, route=route))
-    s["window"]["seconds"] = w
-    s["window"]["include_runs"] = include_runs
-    return s
+    key, ttl = (round(w), route, bool(include_runs)), (3 if w <= 300 else 10 if w <= 3600 else 30)
+    hit = _SUMMARIES.get(key)
+    if hit and time.time() - hit[0] < ttl:
+        return hit[1]
+    with _SUMMARY_LOCKS[key]:
+        hit = _SUMMARIES.get(key)
+        if hit and time.time() - hit[0] < ttl:
+            return hit[1]
+        since = int((time.time() - w) * 1000)
+        s = passive.summarize(store.observations_since(since, include_runs=include_runs, route=route))
+        s["window"]["seconds"] = w
+        s["window"]["include_runs"] = include_runs
+        if len(_SUMMARIES) > 300:
+            _SUMMARIES.clear()
+        _SUMMARIES[key] = (time.time(), s)
+        return s
 
 
 @app.get("/passive/summary")

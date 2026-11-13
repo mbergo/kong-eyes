@@ -42,6 +42,14 @@ h2 { font: 600 16px var(--ui); margin: 38px 0 4px; } h2 + .sub { color: var(--mu
 .chart svg { display: block; max-width: 100%; } .chart text { font: 11.5px var(--ui); fill: var(--muted); }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; margin-top: 6px; } .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
 .look { display: grid; gap: 10px; } .look .panel { border-left: 4px solid var(--waited); } .look .info { border-left-color: var(--other); }
+#where { margin: 14px 0 10px; font-size: 15px; } #where b { font-weight: 600; }
+.gws { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.gw { border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; min-width: 0; } .gw.on { border-color: var(--guard); box-shadow: inset 4px 0 0 var(--guard); }
+.gwtop { display: flex; align-items: baseline; gap: 10px; } .gwtop h3 { margin: 0; font: 600 16px var(--ui); overflow-wrap: anywhere; } .gwtop span { margin-left: auto; font-weight: 600; font-size: 13px; }
+.gw .k { margin: 2px 0 10px; color: var(--muted); font-size: 13px; } .gw .you { margin: 10px 0 0; color: var(--guard); font-weight: 600; font-size: 13px; }
+.gw dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 13.5px; } .gw dt { color: var(--muted); } .gw dd { margin: 0; overflow-wrap: anywhere; }
+.gw button { font: 500 13px var(--ui); padding: 3px 10px; margin: 0 6px 4px 0; border: 1px solid var(--line); border-radius: 999px; background: none; color: inherit; cursor: pointer; }
+.gw button.sel { border-color: var(--guard); color: var(--guard); }
 .look h3 { margin: 0 0 4px; font: 600 15px var(--ui); } .look p { margin: 2px 0; max-width: 86ch; } .look .k { color: var(--muted); }
 table { border-collapse: collapse; width: 100%; font-size: 13.5px; } th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
 td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; } td.num { text-align: right; white-space: nowrap; } td.t { white-space: nowrap; color: var(--muted); }
@@ -64,11 +72,10 @@ details { margin-top: 34px; } summary { cursor: pointer; font-weight: 600; } det
   <span id="stamp"></span>
 </header>
 <div id="err" role="alert"></div>
+<p id="where" aria-live="polite"></p>
+<div class="gws" id="gws"><div class="gw">No gateway has reported yet. One appears here a few seconds after its first request.</div></div>
 <section id="plain" aria-live="polite"></section>
 
-<h2>Gateways sending data</h2>
-<p class="sub">Every Kong that reports here shows up in this list by itself, with the address it sends from and the name that address resolves to.</p>
-<div class="panel" id="gws">None yet. A gateway appears here a few seconds after its first request.</div>
 
 <h2>Where the requests went</h2>
 <p class="sub">Read it left to right. The band is every request that came in; its thickness is how many. What a guardrail stops falls away below it. What is left on the right reached the model.</p>
@@ -285,25 +292,42 @@ function load() {
     st.ov = o; $("err").textContent = "";
     var sel = $("route"), cur = o.route; if (document.activeElement !== sel) { sel.innerHTML = ""; o.routes.forEach(function (r) { var op = h("option", "", r.name + " (" + n(r.requests) + ")"); op.value = r.name; if (r.name === cur) op.selected = true; sel.appendChild(op); }); }
     $("stamp").textContent = "Updated " + new Date(o.generated_at_ms).toLocaleTimeString();
-    plain(o); flow(o); guards(o); look(o);
+    plain(o); flow(o); guards(o); look(o); where();
     return get("api/timeseries?window_s=" + st.window_s + "&buckets=60" + (o.route ? "&route=" + encodeURIComponent(o.route) : "")); }).then(function (ts) { if (!ts || mine !== seq) return; charts(ts); loadReqs(); }).catch(fail);
 }
 $("route").onchange = function () { st.route = this.value; load(); };
 $("pause").onclick = function () { st.paused = !st.paused; this.setAttribute("aria-pressed", st.paused ? "true" : "false"); this.textContent = st.paused ? "Resume the list" : "Pause the list"; if (!st.paused) loadReqs(); };
+var GW = [];
+function ago(sec) { return sec < 90 ? Math.round(sec) + " s ago" : sec < 5400 ? Math.round(sec / 60) + " min ago" : Math.round(sec / 3600) + " h ago"; }
+function where() {
+  var el = $("where"); el.textContent = ""; if (!st.ov || !st.ov.route) return;
+  var route = st.ov.route, gw = GW.filter(function (g) { return g.routes.some(function (r) { return r.name === route; }); })[0];
+  var r = gw && gw.routes.filter(function (x) { return x.name === route; })[0], gs = st.ov.guardrails || [];
+  function add(label, value) { el.appendChild(document.createTextNode(label)); el.appendChild(h("b", "", value)); }
+  add("You are looking at gateway ", gw ? gw.name : "(not identified yet)"); add(", route ", route);
+  if (gs.length) add(gs.length > 1 ? ". Guardrails: " : ". Guardrail: ", gs.map(function (g) { return g.label; }).join(", "));
+  add(". Model: ", r && r.models.length ? r.models.join(", ") : "none seen yet"); el.appendChild(document.createTextNode("."));
+}
 function gateways() {
   get("api/gateways").then(function (d) {
-    var box = $("gws"); if (!d.gateways.length) return;
-    var t = document.createElement("table"), head = document.createElement("tr");
-    ["Gateway", "Address", "Status", "Routes", "Events", "Last heard from"].forEach(function (x) { var th = document.createElement("th"); th.textContent = x; head.appendChild(th); });
-    t.appendChild(head);
-    d.gateways.forEach(function (g) {
-      var tr = document.createElement("tr"), ago = g.seconds_since_last < 90 ? Math.round(g.seconds_since_last) + " s ago" : Math.round(g.seconds_since_last / 60) + " min ago";
-      [[g.name || (g.on_this_server ? "on this server" : "no name for this address"), ""], [g.address, "t"], [g.sending ? "sending" : "quiet", g.sending ? "served" : "waited"],
-       [g.routes.join(", ") || "none yet", ""], [n(g.events), "num"], [ago + (g.kong_versions.length ? " \u00b7 Kong " + g.kong_versions.join(", ") : ""), "t"]]
-        .forEach(function (c) { var td = document.createElement("td"); td.textContent = c[0]; if (c[1]) td.className = c[1]; tr.appendChild(td); });
-      t.appendChild(tr);
+    GW = d.gateways; where(); if (!GW.length) return;
+    var box = $("gws"), cur = st.ov && st.ov.route; box.textContent = "";
+    GW.forEach(function (g) {
+      var mine = g.routes.some(function (r) { return r.name === cur; }), c = h("div", "gw" + (mine ? " on" : "")), top = h("div", "gwtop");
+      top.appendChild(h("h3", "", g.name)); top.appendChild(h("span", g.sending ? "served" : "waited", g.sending ? "sending" : "quiet")); c.appendChild(top);
+      c.appendChild(h("p", "k", [g.on_this_server ? "runs on this server" : (g.environments.join(", ") || "remote"), g.kong_versions.length ? "Kong " + g.kong_versions.join(", ") : "",
+        n(g.events) + " events", "last heard " + ago(g.seconds_since_last)].filter(Boolean).join(", ")));
+      var dl = document.createElement("dl");
+      function row(k, node) { dl.appendChild(h("dt", "", k)); var dd = document.createElement("dd"); dd.appendChild(node); dl.appendChild(dd); }
+      var rs = document.createElement("span");
+      g.routes.forEach(function (r) { var b = h("button", r.name === cur ? "sel" : "", r.name); b.type = "button"; b.setAttribute("aria-pressed", r.name === cur ? "true" : "false");
+        b.onclick = function () { st.route = r.name; load(); setTimeout(gateways, 700); }; rs.appendChild(b); });
+      row("Routes", rs);
+      row("Models", document.createTextNode(g.models.join(", ") || "none seen yet"));
+      row("Sends from", document.createTextNode(g.nodes.slice(0, 3).map(function (x) { return (x.name || "no name") + " (" + x.address + ")"; }).join(", ") + (g.nodes.length > 3 ? " and " + (g.nodes.length - 3) + " more" : "")));
+      c.appendChild(dl); if (mine) c.appendChild(h("p", "you", "You are looking at this gateway."));
+      box.appendChild(c);
     });
-    box.textContent = ""; box.appendChild(t);
   }).catch(function () {});
 }
 gateways(); setInterval(function () { if (!document.hidden) gateways(); }, 5000);
