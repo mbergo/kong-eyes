@@ -100,10 +100,14 @@ def test_pages_load_their_data_from_their_own_address():
     assert "POST /passive/translate" not in get("/chain", raw=True)
 
 
-def test_a_gateway_that_sends_data_is_listed_with_its_address_and_routes(traffic):
+def test_each_gateway_that_sends_data_gets_its_own_box_with_nodes_routes_and_models(traffic):
     d = get("/api/gateways")
-    mine = [g for g in d["gateways"] if ROUTE in g["routes"]]
-    assert mine, d
+    mine = [g for g in d["gateways"] if any(r["name"] == ROUTE for r in g["routes"])]
+    assert len(mine) == 1, d
     g = mine[0]
-    assert g["address"] and g["events"] > 0 and g["sending"] in (True, False) and "name" in g and g["last_seen_ms"] >= g["first_seen_ms"]
-    assert "Gateways sending data" in get("/dashboard", raw=True)
+    assert g["name"] and g["events"] > 0 and g["sending"] is True and g["last_seen_ms"] >= g["first_seen_ms"]
+    assert g["nodes"] and g["nodes"][0]["address"] and "name" in g["nodes"][0]
+    r = next(r for r in g["routes"] if r["name"] == ROUTE)
+    assert r["events"] > 0 and r["models"] and set(r["models"]) <= set(g["models"])       # the model behind the route is named
+    page = get("/dashboard", raw=True)
+    assert 'id="where"' in page and 'id="gws"' in page and "You are looking at gateway" in page

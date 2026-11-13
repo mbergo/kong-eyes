@@ -60,7 +60,7 @@ th { color: var(--muted); font-weight: 400; }
 <div class="app">
   <div class="stage" id="stage">
     <canvas id="c"></canvas><div class="labels" id="labels"></div>
-    <div class="hud"><h1>Guardrail chain, live</h1><p id="sub">Requests enter on the left and pass each guardrail in the order Kong runs them. Drag to turn the view. <a href="dashboard">Back to the dashboard</a></p></div>
+    <div class="hud"><h1>Guardrail chain, live</h1><p id="where" style="font-weight:600;color:var(--ink)"></p><p id="sub">Requests enter on the left and pass each guardrail in the order Kong runs them. Drag to turn the view. <a href="dashboard">Back to the dashboard</a></p></div>
     <details class="key" open><summary>How to read this</summary>
       <dl>
         <div><dt>Start, on the left</dt><dd>Where requests come in from your apps. Every dot begins here.</dd></div>
@@ -90,9 +90,13 @@ th { color: var(--muted); font-weight: 400; }
 var $ = function (id) { return document.getElementById(id); };
 var stage = $("stage"), canvas = $("c"), ctx = canvas.getContext("2d"), labelsEl = $("labels");
 var col = {}, W = 1, H = 1, cam = {}, view = { theta: -0.3, phi: 1.0, dist: 46, tx: 0, ty: 1.6, tz: 0 };
-var data = null, route = null, boxes = [], labels = [];
+var data = null, route = null, boxes = [], labels = [], GWS = [];
+function whereLine() {
+  var gw = GWS.filter(function (g) { return g.routes.some(function (r) { return r.name === route; }); })[0], rr = gw && gw.routes.filter(function (r) { return r.name === route; })[0];
+  $("where").textContent = route ? "Gateway: " + (gw ? gw.name : "(not identified yet)") + ". Route: " + route + ". Model: " + (rr && rr.models.length ? rr.models.join(", ") : "none seen yet") + "." : "";
+}
 // ?window_s=60&poll_s=2 makes the numbers follow the traffic closely (for demos); the defaults suit monitoring
-var QS = new URLSearchParams(location.search), WINDOW_S = Math.max(10, +QS.get("window_s") || 900), POLL_S = Math.max(1, +QS.get("poll_s") || 10);
+var QS = new URLSearchParams(location.search), WINDOW_S = Math.max(10, +QS.get("window_s") || 300), POLL_S = Math.max(1, +QS.get("poll_s") || 10);
 // one colour per guardrail, used for its box outline, its label and its table row; colour is never a fill
 var flow = { req: 0, gs: [] }, STILL = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 var PAL = ["#3b82f6", "#d946ef", "#f59e0b", "#10b981", "#06b6d4", "#84cc16"], gcol = {};
@@ -256,7 +260,7 @@ function rail() {
   if (!names.length) rb.textContent = "No AI traffic in the window yet.";
   $("win").textContent = data.window.requests + " request(s) in the last " + (data.window.seconds < 120 ? Math.round(data.window.seconds) + " s" : Math.round(data.window.seconds / 60) + " min");
   var tbl = $("tbl"); tbl.innerHTML = "<tr><th>guardrail</th><th>reached</th><th>stopped</th><th>altered</th><th>p95 ms</th><th>fail-open?</th></tr>";
-  var r = route && data.routes[route]; paint(); reads(r);
+  var r = route && data.routes[route]; paint(); reads(r); whereLine();
   (r ? r.guardrails_enabled : []).forEach(function (n) { var g = data.guardrails[n]; if (!g) return; var tr = document.createElement("tr");
     [n, g.reached, g.blocked, g.enforced_inline, g.latency_ms ? g.latency_ms.p95 : "n/a", g.fail_open_suspects].forEach(function (v, i) { var td = document.createElement("td"); td.textContent = v; if (i === 0) { td.className = "g"; td.style.color = gcol[n] || ""; } tr.appendChild(td); });
     tbl.appendChild(tr); });
@@ -269,6 +273,7 @@ function rail() {
 function load() {
   var q = "passive/summary?window_s=" + WINDOW_S + ($("runs").checked ? "&include_runs=true" : "");
   fetch(q).then(function (r) { return r.json(); }).then(function (d) { data = d; rail(); build(); }).catch(function (e) { $("sub").textContent = "Could not load /passive/summary: " + e.message; });
+  fetch("api/gateways").then(function (r) { return r.json(); }).then(function (d) { GWS = d.gateways || []; whereLine(); }).catch(function () {});
   fetch("passive/findings").then(function (r) { return r.json(); }).then(function (f) { if (f && f.headline) { $("plainsec").hidden = false; $("headline").textContent = f.headline;
     $("prov").textContent = "translator: " + f.provider + (f.model ? " (" + f.model + ")" : "") + " · " + new Date(f.generated_at_ms).toLocaleString(); } }).catch(function () {});
 }

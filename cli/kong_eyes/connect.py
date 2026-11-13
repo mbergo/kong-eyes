@@ -22,6 +22,7 @@ to add to your declarative file).
 from __future__ import annotations
 
 import json
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -97,7 +98,7 @@ EVENT = """return (function()
   return {
     schema_version = "1.1", event_type = "kong_observation", observer_version = "__VERSION__-bundled", observer_mode = "bundled plugins (pre-function, post-function, http-log)",
     kong_version = kong.version, event_id = ngx.md5(rid .. "|" .. (route and route.id or "") .. "|" .. start), request_id = rid,
-    started_at_ms = start, ended_at_ms = now, duration_ms = now - start, environment = __ENV__, policy_version = __POLICY__,
+    started_at_ms = start, ended_at_ms = now, duration_ms = now - start, environment = __ENV__, policy_version = __POLICY__, gateway = __GATEWAY__,
     route = route and { id = route.id, name = route.name } or nil, service = service and { id = service.id, name = service.name } or nil,
     consumer = consumer and { id = consumer.id, username = consumer.username } or nil,
     runner = { present = false, trusted = false, reason = "bundled-mode" },
@@ -259,9 +260,11 @@ def plan(kong: Kong, a) -> dict:
     for k, v in {"__BODY__": lua(body), "__PROMPT__": str(int(a.show_prompts or 0))}.items():
         pre, post = pre.replace(k, v), post.replace(k, v)
     from . import __version__
+    host = urllib.parse.urlsplit(kong.base).hostname or "kong"
+    gateway = getattr(a, "gateway_name", None) or (f"{kong.konnect} (Konnect)" if kong.konnect else socket.gethostname() if host in ("localhost", "127.0.0.1") else host)
     event = EVENT
     for k, v in {"__GUARD__": lua(guard), "__AUTH__": lua(auth), "__RATE__": lua(rate), "__TIMEOUT__": lua(a.timeout_ms), "__VERSION__": __version__,
-                 "__ENV__": lua(a.environment), "__POLICY__": lua(a.policy_version), "__GUARD_PRIORITY__": str(gprio),
+                 "__ENV__": lua(a.environment), "__GATEWAY__": lua(gateway), "__POLICY__": lua(a.policy_version), "__GUARD_PRIORITY__": str(gprio),
                  "__CONFIGURED__": lua([{"name": n, "enabled": True} for n in sorted(names) if n not in OURS]), "__CHAIN__": lua(chain),
                  "__CAPTURE__": lua("bounded" if a.show_prompts else "hash" if body else "none")}.items():
         event = event.replace(k, v)
@@ -273,7 +276,7 @@ def plan(kong: Kong, a) -> dict:
                plug("http-log", {"http_endpoint": endpoint, "method": "POST", "content_type": "application/json", "timeout": 5000, "keepalive": 60000,
                                  "queue": {"max_batch_size": 50, "max_coalescing_delay": 1, "max_entries": 10000, "max_retry_time": 120},
                                  "custom_fields_by_lua": {"guardrail_observer": event}})]
-    return {"info": info, "route": route, "guardrail": guard, "auth": auth, "rate": rate, "chain": chain, "plugins": plugins, "already": mine,
+    return {"info": info, "route": route, "gateway": gateway, "guardrail": guard, "auth": auth, "rate": rate, "chain": chain, "plugins": plugins, "already": mine,
             "others_on_route": sorted(n for n in names if n not in OURS)}
 
 
