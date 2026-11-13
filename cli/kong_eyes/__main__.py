@@ -5,6 +5,7 @@
   koe status
   koe demo traffic --kong-url URL --apikey KEY [--rps 60] [--minutes 10]
 
+For Konnect (Kong's cloud) set KONNECT_TOKEN to a personal access token and leave the Admin API out.
 Kong's Admin API address comes from --admin-url or KONG_ADMIN_URL; its token, if it needs one, from
 --admin-token or KONG_ADMIN_TOKEN. The collector token comes from --ingest-token or KONG_EYES_INGEST_TOKEN.
 """
@@ -17,7 +18,31 @@ import sys
 from . import __version__, connect as C, demo as D
 
 
+def _konnect_token(a) -> str | None:
+    if a.konnect_token:
+        return a.konnect_token
+    f = os.path.expanduser("~/.konnect-token")
+    return open(f, encoding="utf-8").read().strip() if os.path.isfile(f) else None
+
+
+def _choose_control_plane(cps: list[dict]):
+    print("Your Konnect account has these control planes (a control plane holds the routes and plugins of one gateway):")
+    for n, c in enumerate(cps, 1):
+        print(f"  {n}. {c.get('name') or c['id']:<30} {(c.get('config') or {}).get('cluster_type', '')}")
+    if not sys.stdin.isatty():
+        return None
+    while True:
+        v = input(f"Which one? [1-{len(cps)}] ").strip()
+        if v.isdigit() and 1 <= int(v) <= len(cps):
+            return cps[int(v) - 1]
+
+
 def _kong(a) -> C.Kong:
+    token = _konnect_token(a)
+    if token and not a.admin_url:
+        k = C.konnect(token, a.konnect_region, a.control_plane, os.environ.get("KONNECT_API_URL"), _choose_control_plane)
+        print(f"Konnect, control plane {k.konnect}")
+        return k
     if not a.admin_url:
         a.admin_url = "http://localhost:8001"
         print("No --admin-url or KONG_ADMIN_URL given, trying Kong's usual Admin API address: http://localhost:8001")
@@ -64,7 +89,7 @@ def cmd_connect(a) -> int:
         a.route = _pick_route(kong, a)
     p = C.plan(kong, a)
     i = p["info"]
-    print(f"Kong {i['version']} ({i['edition']}, {'DB-less' if i['dbless'] else 'database'}), route {p['route'].get('name') or p['route']['id']}")
+    print(f"Kong {i['version']} ({i['edition']}{'' if i.get('konnect') else ', DB-less' if i['dbless'] else ', database'}), route {p['route'].get('name') or p['route']['id']}")
     print(f"  plugins on the route   {', '.join(p['others_on_route']) or 'none'}")
     print(f"  guardrail              {p['guardrail']}" + ("" if a.guardrail else "   (guessed: the only plugin that is not a known Kong plugin)"))
     print(f"  stops are attributed   to {p['auth'] or 'no auth plugin'} when no consumer was authenticated"
@@ -118,6 +143,10 @@ def main(argv=None) -> int:
     def common(p):
         p.add_argument("--admin-url", default=os.environ.get("KONG_ADMIN_URL"))
         p.add_argument("--admin-token", default=os.environ.get("KONG_ADMIN_TOKEN"))
+        p.add_argument("--konnect-token", default=os.environ.get("KONNECT_TOKEN"), help="a Konnect personal access token: use Konnect instead of an Admin API "
+                       "(also read from KONNECT_TOKEN or ~/.konnect-token)")
+        p.add_argument("--konnect-region", default=os.environ.get("KONNECT_REGION", "us"), choices=C.KONNECT_REGIONS)
+        p.add_argument("--control-plane", default=os.environ.get("KONNECT_CONTROL_PLANE"), help="Konnect control plane name or id; leave it out to choose from a list")
         p.add_argument("--yes", "-y", action="store_true", help="do not ask before changing the gateway")
         p.add_argument("--dry-run", action="store_true", help="look and report, change nothing")
 
