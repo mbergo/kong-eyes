@@ -177,6 +177,7 @@ def test_konnect_is_driven_through_its_own_api_with_a_personal_access_token(gate
             assert path == f"/plugins/{b['id']}" and b["route"] == {"id": RID} and b["tags"] == ["kong-eyes"]
         log = next(b for _, b in writes if b["name"] == "http-log")
         assert log["config"]["http_endpoint"] == "https://kong:tok@collector.example/ingest/kong" and "guardrail_observer" in log["config"]["custom_fields_by_lua"]
+        assert 'model = "mock-gpt"' in log["config"]["custom_fields_by_lua"]["guardrail_observer"]              # read from the route's ai-proxy
         assert 'gateway = "demo-cp (Konnect)"' in log["config"]["custom_fields_by_lua"]["guardrail_observer"]      # the dashboard names the gateway from this
     finally:
         srv.shutdown()

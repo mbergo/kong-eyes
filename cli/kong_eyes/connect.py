@@ -102,7 +102,7 @@ EVENT = """return (function()
     route = route and { id = route.id, name = route.name } or nil, service = service and { id = service.id, name = service.name } or nil,
     consumer = consumer and { id = consumer.id, username = consumer.username } or nil,
     runner = { present = false, trusted = false, reason = "bundled-mode" },
-    request = { method = kong.request.get_method(), path = kong.request.get_path(), body_bytes = s.ke_n0, body_sha256 = s.ke_h0, body_prefix = s.ke_body },
+    request = { method = kong.request.get_method(), path = kong.request.get_path(), model = __MODEL__, body_bytes = s.ke_n0, body_sha256 = s.ke_h0, body_prefix = s.ke_body },
     response = { status = status, source = source, proxied = c.KONG_PROXIED and true or false, upstream_status = ngx.var.upstream_status,
                  content_type = kong.response.get_header("content-type") },
     exit = exit, trail = trail, guardrails = verdict and { verdict } or {},
@@ -262,9 +262,18 @@ def plan(kong: Kong, a) -> dict:
     from . import __version__
     host = urllib.parse.urlsplit(kong.base).hostname or "kong"
     gateway = getattr(a, "gateway_name", None) or (f"{kong.konnect} (Konnect)" if kong.konnect else socket.gethostname() if host in ("localhost", "127.0.0.1") else host)
+    # the model the route is set up to call, so the dashboard can name it even when Kong's AI statistics logging is off
+    model = None
+    for name in ("ai-proxy", "ai-proxy-advanced"):
+        conf = (effective.get(name) or {}).get("config") or {}
+        models = [conf.get("model")] + [t.get("model") for t in conf.get("targets") or []]
+        names = sorted({m["name"] for m in models if isinstance(m, dict) and m.get("name")})
+        if names:
+            model = ", ".join(names)
+            break
     event = EVENT
     for k, v in {"__GUARD__": lua(guard), "__AUTH__": lua(auth), "__RATE__": lua(rate), "__TIMEOUT__": lua(a.timeout_ms), "__VERSION__": __version__,
-                 "__ENV__": lua(a.environment), "__GATEWAY__": lua(gateway), "__POLICY__": lua(a.policy_version), "__GUARD_PRIORITY__": str(gprio),
+                 "__ENV__": lua(a.environment), "__GATEWAY__": lua(gateway), "__MODEL__": lua(model), "__POLICY__": lua(a.policy_version), "__GUARD_PRIORITY__": str(gprio),
                  "__CONFIGURED__": lua([{"name": n, "enabled": True} for n in sorted(names) if n not in OURS]), "__CHAIN__": lua(chain),
                  "__CAPTURE__": lua("bounded" if a.show_prompts else "hash" if body else "none")}.items():
         event = event.replace(k, v)
@@ -276,7 +285,7 @@ def plan(kong: Kong, a) -> dict:
                plug("http-log", {"http_endpoint": endpoint, "method": "POST", "content_type": "application/json", "timeout": 5000, "keepalive": 60000,
                                  "queue": {"max_batch_size": 50, "max_coalescing_delay": 1, "max_entries": 10000, "max_retry_time": 120},
                                  "custom_fields_by_lua": {"guardrail_observer": event}})]
-    return {"info": info, "route": route, "gateway": gateway, "guardrail": guard, "auth": auth, "rate": rate, "chain": chain, "plugins": plugins, "already": mine,
+    return {"info": info, "route": route, "gateway": gateway, "model": model, "guardrail": guard, "auth": auth, "rate": rate, "chain": chain, "plugins": plugins, "already": mine,
             "others_on_route": sorted(n for n in names if n not in OURS)}
 
 

@@ -91,6 +91,7 @@ def cmd_connect(a) -> int:
     i = p["info"]
     print(f"Kong {i['version']} ({i['edition']}{'' if i.get('konnect') else ', DB-less' if i['dbless'] else ', database'}), route {p['route'].get('name') or p['route']['id']}")
     print(f"  shown on the dashboard as  {p['gateway']}")
+    print(f"  model behind the route     {p['model'] or 'none configured on this route'}")
     print(f"  plugins on the route   {', '.join(p['others_on_route']) or 'none'}")
     print(f"  guardrail              {p['guardrail']}" + ("" if a.guardrail else "   (guessed: the only plugin that is not a known Kong plugin)"))
     print(f"  stops are attributed   to {p['auth'] or 'no auth plugin'} when no consumer was authenticated"
