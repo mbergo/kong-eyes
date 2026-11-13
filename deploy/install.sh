@@ -85,7 +85,7 @@ touch .env; chmod 600 .env
 if [[ -n "$GUARDS" ]]; then
   say "Generating stand-in guardrails: $GUARDS"
   # shellcheck disable=SC2086
-  scripts/gen-demo-guards.sh $GUARDS | head -1
+  scripts/gen-demo-guards.sh $GUARDS | sed -n 1p      # sed reads to the end: `head -1` closed the pipe early and, with pipefail, sometimes ended the install here
   setenv DEMO_CONSOLE true
   [[ -n "$(getenv DEMO_TRAFFIC_MAX_MIN)" ]] || setenv DEMO_TRAFFIC_MAX_MIN 120
 fi
