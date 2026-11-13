@@ -59,10 +59,12 @@ def site(tmp_path_factory):
     shutil.copy(ROOT / "deploy" / "Caddyfile", d / "Caddyfile")
     salt = bytes(range(16))
     pw_hash = "pbkdf2:200000:%s:%s" % (salt.hex(), hashlib.pbkdf2_hmac("sha256", PW.encode(), salt, 200000).hex())
+    pw_hash2 = "pbkdf2:200000:%s:%s" % (salt.hex(), hashlib.pbkdf2_hmac("sha256", b"second-pass", salt, 200000).hex())
     docker("rm", "-f", CADDY, COLLECTOR); docker("network", "rm", NET)
     assert docker("network", "create", NET).returncode == 0
     r = docker("run", "-d", "--name", COLLECTOR, "--network", NET, "--network-alias", "evaluator", "-e", f"INGEST_TOKEN={TOKEN}",
-               "-e", f"FRONT_DOOR_USER={USER}", "-e", f"FRONT_DOOR_HASH={pw_hash}", "-e", "FRONT_DOOR_SECRET=it-secret-0123456789", IMAGE)
+               "-e", f"FRONT_DOOR_USER={USER}", "-e", f"FRONT_DOOR_HASH={pw_hash}", "-e", "FRONT_DOOR_SECRET=it-secret-0123456789",
+               "-e", f"FRONT_DOOR_USERS=CVS={pw_hash2}", IMAGE)
     assert r.returncode == 0, r.stderr
     r = docker("run", "-d", "--name", CADDY, "--network", NET, "-e", "EYES_DOMAIN=localhost", "-p", f"127.0.0.1:{PORT}:443",
                "-v", f"{d}:/etc/caddy:ro", "caddy:2-alpine")
@@ -118,3 +120,13 @@ def test_gateways_post_events_with_the_collector_token_and_no_session(site):
     basic = lambda t: {"Authorization": "Basic " + base64.b64encode(f"kong:{t}".encode()).decode(), "Content-Type": "application/json"}
     assert call("/ingest/kong", "POST", b"[]", basic(TOKEN))[0] == 200
     assert call("/ingest/kong", "POST", b"[]", basic("not-the-token"))[0] in (401, 403)
+
+
+def test_a_second_person_signs_in_with_their_own_password(site):
+    assert sign_in("CVS", PW)[0] == 401                      # the first user's password does not open the second user's door
+    status, _, _, cookie = sign_in("CVS", "second-pass")
+    assert status == 303 and cookie.endswith(".CVS")
+    assert json.loads(call("/api/session", cookie=cookie)[2]) == {"sign_in": True, "user": "CVS"}
+    assert call("/dashboard", headers=HTML, cookie=cookie)[0] == 200
+    forged = cookie[:-len("CVS")] + USER                     # swapping the name in a session breaks its signature
+    assert call("/api/overview", cookie=forged)[0] == 401

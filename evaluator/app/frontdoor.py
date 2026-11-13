@@ -19,10 +19,15 @@ import urllib.parse
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-USER = os.environ.get("FRONT_DOOR_USER", "")
-HASH = os.environ.get("FRONT_DOOR_HASH", "")
 SECRET = os.environ.get("FRONT_DOOR_SECRET", "")
-ENABLED = bool(USER and HASH and SECRET)
+# the first user comes from FRONT_DOOR_USER/FRONT_DOOR_HASH; more as FRONT_DOOR_USERS="name=hash;name=hash" (scripts/front-door-user.sh)
+USERS: dict[str, str] = {}
+if os.environ.get("FRONT_DOOR_USER") and os.environ.get("FRONT_DOOR_HASH"):
+    USERS[os.environ["FRONT_DOOR_USER"]] = os.environ["FRONT_DOOR_HASH"]
+for _pair in (os.environ.get("FRONT_DOOR_USERS") or "").split(";"):
+    if "=" in _pair:
+        USERS[_pair.split("=", 1)[0].strip()] = _pair.split("=", 1)[1].strip()
+ENABLED = bool(USERS and SECRET)
 COOKIE = "koe_session"
 SESSION_DAYS = 7
 OPEN_PATHS = {"/login", "/logout", "/health"}
@@ -33,26 +38,32 @@ def hash_password(password: str, iterations: int = 200_000, salt: bytes | None =
     return "pbkdf2:%d:%s:%s" % (iterations, salt.hex(), hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations).hex())
 
 
-def _password_ok(password: str) -> bool:
+def _password_ok(user: str, password: str) -> bool:
     try:
-        _, iterations, salt, want = HASH.split(":")
+        # an unknown user is checked against a made-up hash, so a wrong name takes as long as a wrong password
+        _, iterations, salt, want = USERS.get(user, "pbkdf2:200000:00:00").split(":")
         got = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), int(iterations)).hex()
     except ValueError:
         return False
-    return hmac.compare_digest(got, want)
+    return user in USERS and hmac.compare_digest(got, want)
 
 
-def _sign(expires: int) -> str:
-    msg = f"{USER}.{expires}"
-    return f"{expires}.{hmac.new(SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()}"
+def _sign(user: str, expires: int) -> str:
+    msg = f"{user}.{expires}"
+    return f"{expires}.{hmac.new(SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()}.{user}"
+
+
+def _session_user(cookie: str | None) -> str | None:
+    try:
+        expires, _, user = (cookie or "").split(".", 2)
+        ok = int(expires) > time.time() and user in USERS and hmac.compare_digest(cookie, _sign(user, int(expires)))
+        return user if ok else None
+    except ValueError:
+        return None
 
 
 def _session_ok(cookie: str | None) -> bool:
-    try:
-        expires, _ = (cookie or "").split(".", 1)
-        return int(expires) > time.time() and hmac.compare_digest(cookie, _sign(int(expires)))
-    except ValueError:
-        return False
+    return _session_user(cookie) is not None
 
 
 def _next(target: str | None) -> str:
@@ -121,13 +132,12 @@ def install(app: FastAPI) -> None:
         target = _next(field("next"))
         if not ENABLED:
             return RedirectResponse(target, status_code=303)
-        right_user = hmac.compare_digest(field("username").encode(), USER.encode())
-        right_password = await asyncio.to_thread(_password_ok, field("password"))
-        if not (right_user and right_password):
+        user = field("username").strip()
+        if not await asyncio.to_thread(_password_ok, user, field("password")):
             await asyncio.sleep(1)                      # slows guessing
             return _page(target, "That user and password do not match. Try again.", status=401)
         r = RedirectResponse(target, status_code=303)
-        r.set_cookie(COOKIE, _sign(int(time.time()) + SESSION_DAYS * 86400), max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax",
+        r.set_cookie(COOKIE, _sign(user, int(time.time()) + SESSION_DAYS * 86400), max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax",
                      secure=request.headers.get("x-forwarded-proto", request.url.scheme) == "https", path="/")
         return r
 
@@ -139,4 +149,4 @@ def install(app: FastAPI) -> None:
 
     @app.get("/api/session", include_in_schema=False)
     async def session(request: Request):
-        return {"sign_in": ENABLED and "x-front-door" in request.headers, "user": USER if ENABLED else None}
+        return {"sign_in": ENABLED and "x-front-door" in request.headers, "user": _session_user(request.cookies.get(COOKIE)) if ENABLED else None}
