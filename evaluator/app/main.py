@@ -24,7 +24,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from . import adjudicate as adj
-from . import api, demo, frontdoor, gateways, ingest, metrics, passive, translate
+from . import api, demo, frontdoor, gateways, ingest, labels, metrics, passive, translate
 from .exporters import metrics_hooks
 from .exporters.otlp import OtlpConfig, OtlpLogs
 from .exporters.splunk import SplunkConfig, SplunkHEC
@@ -415,6 +415,7 @@ def _passive_summary(window_s: float | None, route: str | None, include_runs: bo
         s = passive.summarize(store.observations_since(since, include_runs=include_runs, route=route))
         s["window"]["seconds"] = w
         s["window"]["include_runs"] = include_runs
+        labels.apply_summary(s)                         # names people gave the guardrails
         if len(_SUMMARIES) > 300:
             _SUMMARIES.clear()
         _SUMMARIES[key] = (time.time(), s)
@@ -511,6 +512,8 @@ api.summary = _passive_summary
 api.latest_findings = lambda: (store.latest_findings(1) or [None])[0]
 app.include_router(api.router)
 app.include_router(gateways.router)
+app.include_router(labels.router)
+labels.on_change = lambda: _SUMMARIES.clear()
 
 # separate, demo-only console (404 unless DEMO_CONSOLE=true); see demo.py
 demo.translate_now = passive_translate

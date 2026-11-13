@@ -50,6 +50,10 @@ h2 { font: 600 16px var(--ui); margin: 38px 0 4px; } h2 + .sub { color: var(--mu
 .gw dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 13.5px; } .gw dt { color: var(--muted); } .gw dd { margin: 0; overflow-wrap: anywhere; }
 .gw button { font: 500 13px var(--ui); padding: 3px 10px; margin: 0 6px 4px 0; border: 1px solid var(--line); border-radius: 999px; background: none; color: inherit; cursor: pointer; }
 .gw button.sel { border-color: var(--guard); color: var(--guard); }
+.rename { font: 500 12px var(--ui); padding: 2px 9px; margin-left: 10px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--muted); cursor: pointer; vertical-align: middle; }
+.rename:hover, .rename:focus-visible { color: var(--ink); border-color: currentColor; }
+.g h3 form { display: flex; gap: 6px; align-items: center; } .g h3 input { font: inherit; flex: 1; min-width: 0; padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: none; color: inherit; }
+.gw a { color: inherit; } .gw .go { margin: 10px 0 0; font-size: 13px; }
 .look h3 { margin: 0 0 4px; font: 600 15px var(--ui); } .look p { margin: 2px 0; max-width: 86ch; } .look .k { color: var(--muted); }
 table { border-collapse: collapse; width: 100%; font-size: 13.5px; } th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
 td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; } td.num { text-align: right; white-space: nowrap; } td.t { white-space: nowrap; color: var(--muted); }
@@ -208,11 +212,25 @@ function flow(o) {
   svg.appendChild(el("text", { x: W - 170, y: top + 46, class: "small" }, n(alive) + " requests, " + pct(alive / t.requests)));
   box.appendChild(svg);
 }
+function rename(g, hd) {
+  st.editing = true; hd.textContent = "";
+  var f = document.createElement("form"), inp = document.createElement("input"), ok = h("button", "rename", "Save"), no = h("button", "rename", "Cancel");
+  inp.value = g.label; inp.maxLength = 40; inp.setAttribute("aria-label", "Name for " + g.name); no.type = "button";
+  function done() { st.editing = false; load(); gateways(); }
+  no.onclick = done;
+  f.onsubmit = function (e) { e.preventDefault();
+    fetch("api/labels/" + encodeURIComponent(g.name), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: inp.value }) })
+      .then(function (r) { if (!r.ok) throw new Error("answered " + r.status); done(); })
+      .catch(function (e) { $("err").textContent = "Could not save the name: " + e.message; done(); }); };
+  f.appendChild(inp); f.appendChild(ok); f.appendChild(no); hd.appendChild(f); inp.focus(); inp.select();
+}
 function guards(o) {
   var box = $("guards"); box.innerHTML = "";
   if (!o.guardrails.length) { box.appendChild(h("div", "empty", "No guardrail was seen on this route in this window.")); return; }
   o.guardrails.forEach(function (g) {
-    var c = h("div", "panel g"); c.appendChild(h("h3", "", g.label));
+    var c = h("div", "panel g"), hd = h("h3", "", g.label), rn = h("button", "rename", "Rename"); rn.type = "button"; rn.title = "Give this guardrail a name people recognise";
+    rn.onclick = function () { rename(g, hd); }; hd.appendChild(rn); c.appendChild(hd);
+    if (g.label !== g.name) c.appendChild(h("div", "why", "Kong knows it as " + g.name + "."));
     var big = h("div", "big"); big.appendChild(h("span", g.stopped_share >= .3 ? "stopped" : "", pct(g.stopped_share))); big.appendChild(h("span", "", " stopped")); big.lastChild.style.cssText = "font-size:16px;font-weight:400;color:var(--muted)"; c.appendChild(big);
     var dl = h("dl");
     function row(k, v, why, cls) { dl.appendChild(h("dt", "", k)); var d = h("dd", cls || "", v); dl.appendChild(d); if (why) dl.appendChild(h("div", "why", why)); }
@@ -287,6 +305,7 @@ function loadReqs() { if (st.paused) return; get("api/requests?limit=60" + (st.o
 function fail(e) { $("err").textContent = "Could not reach the collector: " + e.message; }
 var seq = 0;
 function load() {
+  if (st.editing) return;                                  // do not redraw under someone typing a name
   var mine = ++seq, q = "window_s=" + st.window_s + (st.route ? "&route=" + encodeURIComponent(st.route) : "");
   get("api/overview?" + q).then(function (o) { if (mine !== seq) return null;      // a newer load started: drop this answer
     st.ov = o; $("err").textContent = "";
@@ -314,7 +333,8 @@ function gateways() {
     var box = $("gws"), cur = st.ov && st.ov.route; box.textContent = "";
     GW.forEach(function (g) {
       var mine = g.routes.some(function (r) { return r.name === cur; }), c = h("div", "gw" + (mine ? " on" : "")), top = h("div", "gwtop");
-      top.appendChild(h("h3", "", g.name)); top.appendChild(h("span", g.sending ? "served" : "waited", g.sending ? "sending" : "quiet")); c.appendChild(top);
+      var first = (g.routes.filter(function (r) { return r.name === cur; })[0] || g.routes[0] || {}).name, t3 = "chain?route=" + encodeURIComponent(first || "");
+      var hh = h("h3"), ha = h("a", "", g.name); ha.href = t3; ha.title = "Open this gateway in the 3D live flow"; hh.appendChild(ha); top.appendChild(hh); top.appendChild(h("span", g.sending ? "served" : "waited", g.sending ? "sending" : "quiet")); c.appendChild(top);
       c.appendChild(h("p", "k", [g.on_this_server ? "runs on this server" : (g.environments.join(", ") || "remote"), g.kong_versions.length ? "Kong " + g.kong_versions.join(", ") : "",
         n(g.events) + " events", "last heard " + ago(g.seconds_since_last)].filter(Boolean).join(", ")));
       var dl = document.createElement("dl");
@@ -325,7 +345,8 @@ function gateways() {
       row("Routes", rs);
       row("Models", document.createTextNode(g.models.join(", ") || "none seen yet"));
       row("Sends from", document.createTextNode(g.nodes.slice(0, 3).map(function (x) { return (x.name || "no name") + " (" + x.address + ")"; }).join(", ") + (g.nodes.length > 3 ? " and " + (g.nodes.length - 3) + " more" : "")));
-      c.appendChild(dl); if (mine) c.appendChild(h("p", "you", "You are looking at this gateway."));
+      c.appendChild(dl); var go = h("p", "go"), ga = h("a", "", "Open this gateway in the 3D live flow"); ga.href = t3; go.appendChild(ga); c.appendChild(go);
+      if (mine) c.appendChild(h("p", "you", "You are looking at this gateway."));
       box.appendChild(c);
     });
   }).catch(function () {});

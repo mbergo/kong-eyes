@@ -15,7 +15,7 @@ import time
 from fastapi import Request, APIRouter
 from fastapi.responses import HTMLResponse
 
-from . import passive
+from . import labels, passive
 
 router = APIRouter()
 store = None            # set by main.py
@@ -44,7 +44,7 @@ def _plain(route: str, r: dict, guards: list[dict], window_s: float) -> list[str
     for g in guards:
         if not g["reached"]:
             continue
-        s = f"{g['name']} looked at {g['reached']:,} of them and stopped {g['stopped']:,} ({g['stopped_share']:.0%})."
+        s = f"{g['label']} looked at {g['reached']:,} of them and stopped {g['stopped']:,} ({g['stopped_share']:.0%})."
         if g["fail_open"]:
             s += f" {g['fail_open']:,} waited for about its time limit and were then let through, so they may not have been checked."
         out.append(s)
@@ -93,7 +93,7 @@ def overview(window_s: float = 300, route: str | None = None):
             "chain": [{"name": c["name"], "label": c.get("label") or c["name"], "kind": c["kind"]} for c in r.get("chain", [])
                       if c["kind"] in ("guardrail", "candidate", "router")],
             "guardrails": guards, "signals": signals, "plain": _plain(chosen or "this gateway", r, guards, window_s),
-            "findings": ({"headline": f.get("headline"), "items": f.get("findings") or [], "provider": f.get("provider"),
+            "findings": ({"headline": labels.text(f.get("headline")), "items": labels.deep(f.get("findings") or []), "provider": f.get("provider"),
                           "generated_at_ms": f.get("generated_at_ms")} if f else None),
             "prompts_on": PROMPT_CHARS > 0}
 
@@ -131,7 +131,7 @@ def timeseries(window_s: float = 300, buckets: int = 60, route: str | None = Non
         return passive.quantile(xs, p) if xs else None
     order = sorted(series, key=lambda k: (k != "served", not k.startswith("stopped"), k))
     return {"start_ms": start, "step_ms": step, "buckets": n_buckets, "sampled_every": every,
-            "outcomes": [{"name": k, "values": series[k]} for k in order],
+            "outcomes": [{"name": labels.text(k), "values": series[k]} for k in order],
             "gateway_ms": {"median": [q(x, 0.5) for x in per], "p95": [q(x, 0.95) for x in per]},
             "guardrail_ms": {"p95": [q(x, 0.95) for x in gper]}}
 
@@ -158,8 +158,8 @@ def requests(limit: int = 100, route: str | None = None, result: str | None = No
         if PROMPT_CHARS > 0 and req.get("body_prefix"):
             prompt = passive.prompt_excerpt(req["body_prefix"], PROMPT_CHARS)
         c = g.get("consumer") or {}
-        out.append({"at_ms": g.get("started_at_ms"), "status": (g.get("response") or {}).get("status"), "result": a["result"], "stopped_by": a["stopped_by"],
-                    "total_ms": g.get("duration_ms"), "steps": a["steps"], "route": (g.get("route") or {}).get("name"),
+        out.append({"at_ms": g.get("started_at_ms"), "status": (g.get("response") or {}).get("status"), "result": labels.text(a["result"]), "stopped_by": labels.text(a["stopped_by"]),
+                    "total_ms": g.get("duration_ms"), "steps": labels.deep(a["steps"]), "route": (g.get("route") or {}).get("name"),
                     "caller": c.get("username") if isinstance(c, dict) else None, "prompt": prompt, "id": g.get("request_id")})
     return {"requests": out, "prompts_on": PROMPT_CHARS > 0}
 
