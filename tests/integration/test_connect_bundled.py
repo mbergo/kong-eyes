@@ -123,3 +123,59 @@ def test_without_a_route_it_lists_the_routes_to_choose_from(gateway):
     out = r.stdout + r.stderr
     assert "A route is one entry point" in out and "ai-named-route" in out and "/ai/named" in out, out[-800:]
     assert r.returncode != 0 and "--route NAME" in out   # several routes and no terminal: it asks for the name, and changes nothing
+
+
+def test_konnect_is_driven_through_its_own_api_with_a_personal_access_token(gateway):
+    """A stand-in for Konnect's API in front of the real Kong: bearer token, control planes, routes by id only, plugins written with PUT."""
+    import http.server
+    import re
+    import threading
+    writes, port = [], 18449
+
+    class Konnect(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def answer(self, code, obj):
+            raw = json.dumps(obj).encode()
+            self.send_response(code); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(raw))); self.end_headers(); self.wfile.write(raw)
+
+        def handle_any(self):
+            if self.headers.get("Authorization") != "Bearer kpat_test":
+                return self.answer(401, {"message": "Unauthorized"})
+            if self.path.startswith("/v2/control-planes?"):
+                return self.answer(200, {"data": [{"id": "cp-1", "name": "demo-cp"}, {"id": "cp-2", "name": "other-cp"}], "meta": {"page": {"total": 2}}})
+            m = re.match(r"/v2/control-planes/cp-1/core-entities(/.*)", self.path)
+            if not m:
+                return self.answer(404, {"message": "Not Found"})
+            rest = m.group(1)
+            if self.command == "PUT":
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                writes.append((rest, body))
+                return self.answer(200, body)
+            if re.match(r"/routes/[^/?]+$", rest) and not re.match(r"/routes/[0-9a-f-]{36}$", rest):
+                return self.answer(404, {"message": "Not Found"})          # Konnect looks routes up by id only
+            return self.answer(200, api("GET", ADMIN + rest))
+
+        do_GET = do_PUT = handle_any
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), Konnect)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        env = dict(os.environ, PYTHONPATH=str(ROOT / "cli"), NO_PROXY="localhost,127.0.0.1", KONNECT_API_URL=f"http://localhost:{port}", HOME="/nonexistent")
+        run = lambda *a, token="kpat_test": subprocess.run([sys.executable, "-m", "kong_eyes", *a], env=dict(env, KONNECT_TOKEN=token), capture_output=True, text=True, timeout=120)
+        base = ("connect", "--route", ROUTE, "--ingest-url", "https://collector.example/ingest/kong", "--ingest-token", "tok", "--yes")
+        r = run(*base)                                              # two control planes and no terminal: it names them and changes nothing
+        assert r.returncode != 0 and "demo-cp" in r.stdout + r.stderr and "other-cp" in r.stdout + r.stderr and not writes, r.stdout + r.stderr
+        r = run(*base, token="kpat_wrong")
+        assert r.returncode != 0 and "personal access token" in r.stderr and not writes
+        r = run(*base, "--control-plane", "demo-cp")
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "Konnect, control plane demo-cp" in r.stdout and f"guardrail              {GUARD}" in r.stdout and "connected." in r.stdout
+        assert sorted(b["name"] for _, b in writes) == ["http-log", "post-function", "pre-function"]
+        for path, b in writes:
+            assert path == f"/plugins/{b['id']}" and b["route"] == {"id": RID} and b["tags"] == ["kong-eyes"]
+        log = next(b for _, b in writes if b["name"] == "http-log")
+        assert log["config"]["http_endpoint"] == "https://kong:tok@collector.example/ingest/kong" and "guardrail_observer" in log["config"]["custom_fields_by_lua"]
+    finally:
+        srv.shutdown()

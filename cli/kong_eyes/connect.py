@@ -115,11 +115,13 @@ end)()"""
 
 
 class Kong:
-    def __init__(self, admin_url: str, token: str | None = None):
+    def __init__(self, admin_url: str, token: str | None = None, konnect: str | None = None):
+        """konnect: the control plane's name when admin_url is a Konnect control plane's core-entities address."""
         self.base = admin_url.rstrip("/")
-        self.headers = {"Content-Type": "application/json"}
+        self.konnect = konnect
+        self.headers = {"Content-Type": "application/json", "User-Agent": "koe"}
         if token:
-            self.headers["Kong-Admin-Token"] = token
+            self.headers["Authorization" if konnect else "Kong-Admin-Token"] = f"Bearer {token}" if konnect else token
         local = any(h in self.base for h in ("//localhost", "//127.0.0.1"))
         self._open = urllib.request.build_opener(urllib.request.ProxyHandler({})) if local else urllib.request.build_opener()
 
@@ -130,11 +132,16 @@ class Kong:
                 raw = r.read()
                 return json.loads(raw) if raw else None
         except urllib.error.HTTPError as e:
+            if self.konnect and e.code in (401, 403):
+                raise SystemExit(f"Konnect refused the token ({e.code}). Create a personal access token in Konnect and pass it as KONNECT_TOKEN.") from None
             raise SystemExit(f"Kong Admin API {method} {path} -> {e.code}: {e.read().decode()[:400]}") from None
         except urllib.error.URLError as e:
             raise SystemExit(f"cannot reach Kong's Admin API at {self.base}: {e.reason}") from None
 
     def info(self) -> dict:
+        if self.konnect:                 # Konnect has no node to ask; its control planes store config in a database and ship these plugins
+            return {"version": "Konnect", "edition": f"control plane {self.konnect}", "dbless": False, "role": "control_plane",
+                    "untrusted_lua": "sandbox", "available": set(OURS), "konnect": True}
         d = self.call("GET", "/")
         c = d.get("configuration") or {}
         return {"version": d.get("version"), "edition": d.get("edition", "community"), "dbless": c.get("database") == "off",
@@ -142,12 +149,52 @@ class Kong:
                 "available": set((d.get("plugins") or {}).get("available_on_server") or {})}
 
     def pages(self, path: str) -> list[dict]:
-        out, nxt = [], path + ("&" if "?" in path else "?") + "size=1000"
-        while nxt:
-            d = self.call("GET", nxt)
+        out, offset = [], None
+        while True:
+            d = self.call("GET", path + ("&" if "?" in path else "?") + "size=1000" + (f"&offset={urllib.parse.quote(offset, safe='')}" if offset else ""))
             out += d.get("data") or []
-            nxt = d.get("next")
-        return out
+            offset = d.get("offset")
+            if not offset:
+                return out
+
+    def route(self, name_or_id: str) -> dict:
+        if not self.konnect:
+            return self.call("GET", f"/routes/{urllib.parse.quote(name_or_id)}")
+        for r in self.pages("/routes"):                    # Konnect looks routes up by id only
+            if name_or_id in (r.get("name"), r["id"]):
+                return r
+        raise SystemExit(f"this control plane has no route called {name_or_id}")
+
+
+KONNECT_REGIONS = ("us", "eu", "au", "me", "in", "sg")
+
+
+def konnect(token: str, region: str = "us", control_plane: str | None = None, api_url: str | None = None, choose=None) -> Kong:
+    """A Konnect control plane, addressed like an Admin API. Lists the control planes and picks one."""
+    api = (api_url or f"https://{region}.api.konghq.com").rstrip("/")
+    root = Kong(api + "/v2", token, konnect="?")
+    cps, page = [], 1
+    while True:
+        d = root.call("GET", f"/control-planes?page%5Bsize%5D=100&page%5Bnumber%5D={page}")
+        cps += d.get("data") or []
+        total = ((d.get("meta") or {}).get("page") or {}).get("total") or len(cps)
+        if not d.get("data") or len(cps) >= total:
+            break
+        page += 1
+    if not cps:
+        raise SystemExit(f"this Konnect account has no control planes in region {region}. Try --konnect-region ({', '.join(KONNECT_REGIONS)}).")
+    if control_plane:
+        hit = [c for c in cps if control_plane in (c.get("name"), c.get("id"))]
+        if not hit:
+            raise SystemExit(f"no control plane called {control_plane} (found: {', '.join(c['name'] for c in cps)})")
+        cp = hit[0]
+    elif len(cps) == 1:
+        cp = cps[0]
+    else:
+        cp = choose(cps) if choose else None
+        if cp is None:
+            raise SystemExit(f"more than one control plane: run again with --control-plane NAME ({', '.join(c['name'] for c in cps)})")
+    return Kong(f"{api}/v2/control-planes/{cp['id']}/core-entities", token, konnect=cp.get("name") or cp["id"])
 
 
 def lua(v) -> str:
@@ -176,7 +223,7 @@ def plan(kong: Kong, a) -> dict:
     if info["untrusted_lua"] == "off":
         raise SystemExit("this Kong runs with untrusted_lua=off, which disables pre-function, post-function and custom log fields. "
                          "Use the probe plugins instead (scripts/gen-probes.sh).")
-    route = kong.call("GET", f"/routes/{urllib.parse.quote(a.route)}")
+    route = kong.route(a.route)
     rid, sid = route["id"], (route.get("service") or {}).get("id")
     scoped = kong.pages(f"/routes/{rid}/plugins")
     inherited = [p for p in kong.pages("/plugins") if not p.get("route") and not p.get("consumer") and
@@ -254,7 +301,7 @@ def apply(kong: Kong, p: dict) -> None:
 
 def remove(kong: Kong, route_name: str) -> list[str]:
     info = kong.info()
-    route = kong.call("GET", f"/routes/{urllib.parse.quote(route_name)}")
+    route = kong.route(route_name)
     mine = [x for x in kong.pages(f"/routes/{route['id']}/plugins") if TAG in (x.get("tags") or [])]
     if not mine:
         return []

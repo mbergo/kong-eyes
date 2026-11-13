@@ -113,10 +113,14 @@ details { margin-top: 34px; } summary { cursor: pointer; font-weight: 600; } det
 <p>One command on a machine that can reach your Kong's Admin API. It adds three plugins that already ship with Kong
 (nothing to install or build) to one route, and they report each request's outcome and timing here. Prompts are not sent.
 Your guardrail is not changed. <code>koe disconnect</code> removes everything it added.</p>
+<p><strong>A Kong you run yourself</strong> (Docker, a VM, Kubernetes):</p>
 <pre id="connect-cmd">loading…</pre>
 <p><button id="connect-copy" type="button">Copy the command</button></p>
+<p><strong>Konnect, Kong's cloud:</strong> create a personal access token in Konnect (your avatar, Personal access tokens) and use it in place of the Admin API address:</p>
+<pre id="connect-cmd-k">loading…</pre>
+<p><button id="connect-copy-k" type="button">Copy the command</button></p>
 <ol>
-<li>Run it. It lists the entry points (routes) your Kong has, with their paths and plugins, and asks which one carries the AI traffic.</li>
+<li>Run it. On Konnect it first asks which control plane. Then it lists the entry points (routes) your Kong has, with their paths and plugins, and asks which one carries the AI traffic.</li>
 <li>It then shows what it will add and asks before changing anything.</li>
 <li>Send traffic through that route, then pick it in the selector at the top of this page.</li>
 </ol>
@@ -129,6 +133,10 @@ fetch('api/connect').then(r => r.json()).then(c => {
     'export KONG_ADMIN_URL=http://localhost:8001   # where your Kong answers its Admin API\n' +
     'bin/koe connect \\\n  --ingest-url ' + c.ingest_url + (c.ingest_token ? ' \\\n  --ingest-token ' + c.ingest_token : '');
   document.getElementById('connect-cmd').textContent = cmd;
+  const tail = cmd.slice(cmd.indexOf('bin/koe connect'));
+  const cmdK = 'git clone https://github.com/mbergo/kong-eyes && cd kong-eyes\n' + 'export KONNECT_TOKEN=kpat_...   # your Konnect personal access token\n' + tail;
+  document.getElementById('connect-cmd-k').textContent = cmdK;
+  document.getElementById('connect-copy-k').onclick = e => navigator.clipboard.writeText(cmdK).then(() => { e.target.textContent = 'Copied'; });
   document.getElementById('connect-copy').onclick = e => navigator.clipboard.writeText(cmd.replace(/\\\n\s*/g, '')).then(() => { e.target.textContent = 'Copied'; });
 }).catch(() => { document.getElementById('connect-cmd').textContent = 'Could not load the connection details.'; });
 </script>
