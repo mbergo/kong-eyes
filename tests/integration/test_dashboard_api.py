@@ -91,7 +91,7 @@ def test_dashboard_links_the_other_pages_and_says_how_to_connect_a_kong():
 
 def test_the_3d_page_explains_what_its_shapes_mean():
     page = get("/chain", raw=True)
-    assert "How to read this" in page and "A taller box" in page and "A dot with a ring" in page and 'href="dashboard"' in page
+    assert "How to read this" in page and "Start, on the left" in page and "over-flagging?" in page and "What each guardrail is doing" in page and 'href="dashboard"' in page
 
 
 def test_pages_load_their_data_from_their_own_address():

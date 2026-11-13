@@ -25,6 +25,9 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: 
 .lbl { position: absolute; left: 0; top: 0; text-align: center; max-width: 150px; font-size: 11px; line-height: 1.25; font-weight: 600;
   background: transparent; border: 0; padding: 2px 6px; text-shadow: 0 0 3px var(--ground), 0 0 7px var(--ground), 0 0 12px var(--ground); }
 .lbl small { display: block; font: 400 10px var(--mono); color: var(--muted); white-space: nowrap; }
+.lbl .flag { color: var(--warn); font-weight: 600; }
+.read { border: 1px solid var(--hairline); border-left: 3px solid var(--probe); border-radius: 4px; padding: 8px 10px; font-size: 13px; }
+.read b { font-weight: 600; } .read .nums { font: 400 11.5px var(--mono); color: var(--muted); margin: 2px 0 4px; } .read p { margin: 4px 0 0; } .read .tag { color: var(--warn); font-weight: 600; }
 .lbl.warn b::after { content: " !"; color: var(--warn); }
 .lbl.probe { background: transparent; border-color: transparent; font: 400 10px var(--mono); color: var(--muted); }
 .hud { position: absolute; left: 16px; top: 12px; right: 16px; pointer-events: none; }
@@ -60,13 +63,13 @@ th { color: var(--muted); font-weight: 400; }
     <div class="hud"><h1>Guardrail chain, live</h1><p id="sub">Requests enter on the left and pass each guardrail in the order Kong runs them. Drag to turn the view. <a href="dashboard">Back to the dashboard</a></p></div>
     <details class="key" open><summary>How to read this</summary>
       <dl>
-        <div><dt>A box</dt><dd>One guardrail (or another plugin on the route). Its name and numbers are written on it.</dd></div>
-        <div><dt>A taller box</dt><dd>That guardrail is slower. Height is the time 95 of 100 requests spend in it. The scale is compressed: one step up is about ten times slower.</dd></div>
-        <div><dt>A dot</dt><dd>One request. More dots at once means more requests per second right now.</dd></div>
-        <div><dt>A dot that changes colour and drops</dt><dd>The guardrail of that colour stopped it. Many drops at one box means that guardrail is stopping a lot.</dd></div>
-        <div><dt>A dot with a ring</dt><dd>It waited until the guardrail's time limit and was let through unchecked. Worth a look.</dd></div>
-        <div><dt>A dot that reaches the right</dt><dd>It was served by the model.</dd></div>
-        <div><dt>&ldquo;!&rdquo; after a name</dt><dd>There is a signal to investigate for that guardrail, listed on the right.</dd></div>
+        <div><dt>Start, on the left</dt><dd>Where requests come in from your apps. Every dot begins here.</dd></div>
+        <div><dt>Coloured boxes</dt><dd>The guardrails, left to right in the order Kong runs them. Each one says its place (1 of 2), how much it stops and the time it adds.</dd></div>
+        <div><dt>End, on the right</dt><dd>The model. A dot that gets here was answered.</dd></div>
+        <div><dt>Height of a box</dt><dd>Time cost. Taller means that guardrail makes requests wait longer (one step up is about ten times slower).</dd></div>
+        <div><dt>A dot</dt><dd>One request. A dot that takes a guardrail's colour and drops was stopped there. A dot with a ring waited for the time limit and went through unchecked.</dd></div>
+        <div><dt>&ldquo;over-flagging?&rdquo;</dt><dd>The guardrail may be stopping honest requests: it stops a large share, or stopped callers get through on a retry.</dd></div>
+        <div><dt>&ldquo;under-flagging?&rdquo;</dt><dd>It may be letting bad requests pass: some went through unchecked, or a later guardrail stopped what it let by.</dd></div>
         <div><dt>Small grey labels</dt><dd>Measuring points between guardrails. They only take timestamps.</dd></div>
       </dl>
     </details>
@@ -75,6 +78,7 @@ th { color: var(--muted); font-weight: 400; }
     <section><h2>Route</h2><div class="seg" id="routes"></div></section>
     <section><label><input type="checkbox" id="runs"> include labelled test runs</label> <span class="note" id="win"></span></section>
     <section><h2>Guardrails on this route</h2><table id="tbl"></table></section>
+    <section><h2>What each guardrail is doing</h2><div class="list" id="reads"></div></section>
     <section id="plainsec" hidden><h2>In plain language</h2><div class="head" id="headline"></div><div class="note" id="prov"></div></section>
     <section><h2>Signals to investigate</h2><div class="list" id="signals"></div></section>
     <p class="note">Signals are places to look, not verdicts: ordinary traffic carries no labels, so nothing here proves a guardrail right or wrong.</p>
@@ -126,6 +130,36 @@ function drawBox(b, fill, alpha, edge, lw) {
 }
 function pct(v) { return v == null ? "n/a" : Math.round(v * 100) + "%"; }
 
+function ms(v) { return v == null ? "n/a" : (v < 10 ? Math.round(v * 10) / 10 : Math.round(v)) + " ms"; }
+function readings(r) {
+  var order = (r.chain || []).map(function (c) { return c.name; }), names = (r.guardrails_enabled || []).filter(function (n) { return data.guardrails[n]; });
+  names.sort(function (a, b) { return order.indexOf(a) - order.indexOf(b); });
+  var out = {};
+  names.forEach(function (n, i) {
+    var g = data.guardrails[n], ab = (data.after_block || {})[n] || {}, stopped = (g.blocked || 0) + (g.enforced_inline || 0), passed = Math.max(0, (g.reached || 0) - stopped), later = 0, laterBy = [];
+    names.slice(i + 1).forEach(function (m) { var x = data.guardrails[m], k = (x.blocked || 0) + (x.enforced_inline || 0); if (k) { later += k; laterBy.push(m); } });
+    var lat = g.latency_ms || {}, notes = [], over = false, under = false, retry = ab.followed_by_retry || 0, through = ab.retry_got_through || 0;
+    if ((g.reached || 0) >= 20 && g.intervention_rate >= 0.2) { over = true; notes.push("It stops " + pct(g.intervention_rate) + " of what it sees, which is a lot. Read a few of the stopped requests to see whether they were honest."); }
+    if (retry >= 5 && through / retry >= 0.3) { over = true; notes.push(through + " of " + retry + " stopped callers got through on their next try. Honest rewordings mean over-flagging; tricks mean the rule is easy to step around."); }
+    if (g.fail_open_suspects > 0) { under = true; notes.push(g.fail_open_suspects + " request(s) waited for its time limit and went through unchecked."); }
+    if (passed >= 20 && later / passed >= 0.05) { under = true; notes.push(later + " request(s) it let through were then stopped by " + laterBy.join(" and ") + "."); }
+    if (!notes.length) notes.push((g.reached || 0) < 20 ? "Too few requests yet to say anything." : "No sign of over-flagging or under-flagging in this window.");
+    out[n] = { name: n, pos: i + 1, of: names.length, reached: g.reached || 0, stopped: stopped, rate: g.intervention_rate, p50: lat.p50, p95: lat.p95, over: over, under: under, notes: notes,
+               tags: (over ? ["over-flagging?"] : []).concat(under ? ["under-flagging?"] : []) };
+  });
+  return out;
+}
+function reads(r) {
+  var box = $("reads"); box.innerHTML = ""; if (!r) return;
+  var rd = readings(r), names = Object.keys(rd).sort(function (a, b) { return rd[a].pos - rd[b].pos; });
+  if (!names.length) { box.textContent = "No guardrail has seen traffic on this route yet."; return; }
+  names.forEach(function (n) { var x = rd[n], d = document.createElement("div"); d.className = "read"; d.style.borderLeftColor = gcol[n] || "";
+    var h = document.createElement("div"), b = document.createElement("b"); b.textContent = n; b.style.color = gcol[n] || ""; h.appendChild(b);
+    h.appendChild(document.createTextNode("  guardrail " + x.pos + " of " + x.of)); x.tags.forEach(function (t) { var s = document.createElement("span"); s.className = "tag"; s.textContent = "  " + t; h.appendChild(s); });
+    var nums = document.createElement("div"); nums.className = "nums"; nums.textContent = "saw " + x.reached + " · stopped " + x.stopped + " (" + pct(x.rate) + ") · adds " + ms(x.p50) + " typically, " + ms(x.p95) + " for the slowest 5%";
+    d.appendChild(h); d.appendChild(nums); x.notes.forEach(function (t) { var p = document.createElement("p"); p.textContent = t; d.appendChild(p); }); box.appendChild(d); });
+}
+
 function build() {
   boxes = []; labelsEl.innerHTML = ""; labels = [];
   if (!data || !route || !data.routes[route]) return;
@@ -133,7 +167,8 @@ function build() {
   flow = { req: data.routes[route].requests || 0, gs: [] };
   var r = data.routes[route], chain = (r.chain || []).filter(function (c) { return c.name !== "guardrail-observer" && c.name !== "guardrail-observer-tail" && c.kind !== "plugin"; });
   var warn = {}; (data.signals || []).forEach(function (s) { if (s.severity === "warn" && s.guardrail && (!s.route || s.route === route)) warn[s.guardrail] = true; });
-  var items = [{ name: "client", kind: "end" }].concat(chain).concat([{ name: "model provider", kind: "end2" }]);
+  var items = [{ name: "client", kind: "end", label: "Start: your apps" }].concat(chain).concat([{ name: "model provider", kind: "end2", label: "End: the model" }]);
+  var rd = readings(r);
   var x = 0, widths = items.map(function (c) { return c.kind === "probe" ? 0.5 : 3.4; }), total = widths.reduce(function (a, b) { return a + b + 1.1; }, -1.1);
   x = -total / 2;
   items.forEach(function (c, i) {
@@ -141,8 +176,10 @@ function build() {
     if ((c.kind === "guardrail" || c.kind === "candidate") && g && g.latency_ms) {
       var p95 = g.latency_ms && g.latency_ms.p95;
       h = 0.7 + Math.min(5, Math.log(1 + (p95 || 0)) / Math.LN10 * 1.6);
-      sub = (c.kind === "candidate" ? "found on the route · " : "stopped/altered " + pct(g.intervention_rate) + " · ") + (p95 != null ? "p95 " + p95 + " ms" : "p95 n/a");
-    } else if (c.kind === "router") { h = 1.0; sub = "routes to the model"; }
+      sub = (rd[c.name] ? "guardrail " + rd[c.name].pos + " of " + rd[c.name].of + " · " : c.kind === "candidate" ? "found on the route · " : "") + "stops " + pct(g.intervention_rate) + " · adds " + ms(g.latency_ms.p50);
+    } else if (c.kind === "router") { h = 1.0; sub = "hands the request to the model"; }
+    else if (c.kind === "end") { h = 0.8; sub = "requests come in here"; }
+    else if (c.kind === "end2") { h = 0.8; sub = "answered requests end here"; }
     else if (c.kind === "probe") { h = 0.25; }
     else if (c.kind === "candidate") { h = 0.7; sub = "found on the route, not declared"; }
     else { h = 0.8; }
@@ -155,6 +192,7 @@ function build() {
     if (c.kind !== "probe") b.style.color = edge;
     if (c.label && c.label !== c.name) el.title = c.name; el.appendChild(b);
     if (sub) { var s = document.createElement("small"); s.textContent = sub; el.appendChild(s); }
+    if (rd[c.name] && rd[c.name].tags.length) { var fl = document.createElement("small"); fl.className = "flag"; fl.textContent = rd[c.name].tags.join("  "); el.appendChild(fl); }
     labelsEl.appendChild(el); labels.push({ el: el, x: x + w / 2, y: 0.3 + h + 0.35, z: 0 });
     x += w + 1.1;
   });
@@ -218,7 +256,7 @@ function rail() {
   if (!names.length) rb.textContent = "No AI traffic in the window yet.";
   $("win").textContent = data.window.requests + " request(s) in the last " + (data.window.seconds < 120 ? Math.round(data.window.seconds) + " s" : Math.round(data.window.seconds / 60) + " min");
   var tbl = $("tbl"); tbl.innerHTML = "<tr><th>guardrail</th><th>reached</th><th>stopped</th><th>altered</th><th>p95 ms</th><th>fail-open?</th></tr>";
-  var r = route && data.routes[route]; paint();
+  var r = route && data.routes[route]; paint(); reads(r);
   (r ? r.guardrails_enabled : []).forEach(function (n) { var g = data.guardrails[n]; if (!g) return; var tr = document.createElement("tr");
     [n, g.reached, g.blocked, g.enforced_inline, g.latency_ms ? g.latency_ms.p95 : "n/a", g.fail_open_suspects].forEach(function (v, i) { var td = document.createElement("td"); td.textContent = v; if (i === 0) { td.className = "g"; td.style.color = gcol[n] || ""; } tr.appendChild(td); });
     tbl.appendChild(tr); });
