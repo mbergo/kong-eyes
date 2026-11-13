@@ -57,11 +57,11 @@ def model_of(gro: dict) -> str | None:
     """The model a request went to, from Kong's own AI fields when the request reached one."""
     for v in (gro.get("ai_native") or {}).values():
         meta = (v or {}).get("meta") or {}
-        m = meta.get("response_model") or meta.get("request_model")
-        if m:
-            return str(m)
+        for m in (meta.get("response_model"), meta.get("request_model")):
+            if m and str(m).upper() != "UNSPECIFIED":          # Kong writes UNSPECIFIED when the request never reached a model
+                return str(m)
     m = (gro.get("request") or {}).get("model")
-    return str(m) if m else None
+    return str(m) if m and str(m).upper() != "UNSPECIFIED" else None
 
 
 def note(request: Request, events: list[dict]) -> None:

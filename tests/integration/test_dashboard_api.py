@@ -108,6 +108,7 @@ def test_each_gateway_that_sends_data_gets_its_own_box_with_nodes_routes_and_mod
     assert g["name"] and g["events"] > 0 and g["sending"] is True and g["last_seen_ms"] >= g["first_seen_ms"]
     assert g["nodes"] and g["nodes"][0]["address"] and "name" in g["nodes"][0]
     r = next(r for r in g["routes"] if r["name"] == ROUTE)
+    assert "UNSPECIFIED" not in r["models"]
     assert r["events"] > 0 and r["models"] and set(r["models"]) <= set(g["models"])       # the model behind the route is named
     page = get("/dashboard", raw=True)
     assert 'id="where"' in page and 'id="gws"' in page and "You are looking at gateway" in page
