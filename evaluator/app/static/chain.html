@@ -97,6 +97,8 @@ function whereLine() {
 }
 // ?window_s=60&poll_s=2 makes the numbers follow the traffic closely (for demos); the defaults suit monitoring
 var QS = new URLSearchParams(location.search), WINDOW_S = Math.max(10, +QS.get("window_s") || 300), POLL_S = Math.max(1, +QS.get("poll_s") || 10);
+route = QS.get("route") || null;                       // a gateway box on the dashboard links here with its route
+var LBL = {}; function L(n) { return LBL[n] || n; }      // names people gave the guardrails
 // one colour per guardrail, used for its box outline, its label and its table row; colour is never a fill
 var flow = { req: 0, gs: [] }, STILL = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 var PAL = ["#3b82f6", "#d946ef", "#f59e0b", "#10b981", "#06b6d4", "#84cc16"], gcol = {};
@@ -146,7 +148,7 @@ function readings(r) {
     if ((g.reached || 0) >= 20 && g.intervention_rate >= 0.15) { over = true; notes.push("It stops " + pct(g.intervention_rate) + " of what it sees, which is a lot. Read a few of the stopped requests to see whether they were honest."); }
     if (retry >= 5 && through / retry >= 0.3) { over = true; notes.push(through + " of " + retry + " stopped callers got through on their next try. Honest rewordings mean over-flagging; tricks mean the rule is easy to step around."); }
     if (g.fail_open_suspects > 0) { under = true; notes.push(g.fail_open_suspects + " request(s) waited for its time limit and went through unchecked."); }
-    if (passed >= 20 && later / passed >= 0.05) { under = true; notes.push(later + " request(s) it let through were then stopped by " + laterBy.join(" and ") + "."); }
+    if (passed >= 20 && later / passed >= 0.05) { under = true; notes.push(later + " request(s) it let through were then stopped by " + laterBy.map(L).join(" and ") + "."); }
     if (!notes.length) notes.push((g.reached || 0) < 20 ? "Too few requests yet to say anything." : "No sign of over-flagging or under-flagging in this window.");
     out[n] = { name: n, pos: i + 1, of: names.length, reached: g.reached || 0, stopped: stopped, rate: g.intervention_rate, p50: lat.p50, p95: lat.p95, over: over, under: under, notes: notes,
                tags: (over ? ["over-flagging?"] : []).concat(under ? ["under-flagging?"] : []) };
@@ -158,7 +160,7 @@ function reads(r) {
   var rd = readings(r), names = Object.keys(rd).sort(function (a, b) { return rd[a].pos - rd[b].pos; });
   if (!names.length) { box.textContent = "No guardrail has seen traffic on this route yet."; return; }
   names.forEach(function (n) { var x = rd[n], d = document.createElement("div"); d.className = "read"; d.style.borderLeftColor = gcol[n] || "";
-    var h = document.createElement("div"), b = document.createElement("b"); b.textContent = n; b.style.color = gcol[n] || ""; h.appendChild(b);
+    var h = document.createElement("div"), b = document.createElement("b"); b.textContent = L(n); b.style.color = gcol[n] || ""; h.appendChild(b);
     h.appendChild(document.createTextNode("  guardrail " + x.pos + " of " + x.of)); x.tags.forEach(function (t) { var s = document.createElement("span"); s.className = "tag"; s.textContent = "  " + t; h.appendChild(s); });
     var nums = document.createElement("div"); nums.className = "nums"; nums.textContent = "saw " + x.reached + " · stopped " + x.stopped + " (" + pct(x.rate) + ") · adds " + ms(x.p50) + " typically, " + ms(x.p95) + " for the slowest 5%";
     d.appendChild(h); d.appendChild(nums); x.notes.forEach(function (t) { var p = document.createElement("p"); p.textContent = t; d.appendChild(p); }); box.appendChild(d); });
@@ -260,9 +262,9 @@ function rail() {
   if (!names.length) rb.textContent = "No AI traffic in the window yet.";
   $("win").textContent = data.window.requests + " request(s) in the last " + (data.window.seconds < 120 ? Math.round(data.window.seconds) + " s" : Math.round(data.window.seconds / 60) + " min");
   var tbl = $("tbl"); tbl.innerHTML = "<tr><th>guardrail</th><th>reached</th><th>stopped</th><th>altered</th><th>p95 ms</th><th>fail-open?</th></tr>";
-  var r = route && data.routes[route]; paint(); reads(r); whereLine();
+  var r = route && data.routes[route]; LBL = {}; ((r && r.chain) || []).forEach(function (c) { if (c.label) LBL[c.name] = c.label; }); paint(); reads(r); whereLine();
   (r ? r.guardrails_enabled : []).forEach(function (n) { var g = data.guardrails[n]; if (!g) return; var tr = document.createElement("tr");
-    [n, g.reached, g.blocked, g.enforced_inline, g.latency_ms ? g.latency_ms.p95 : "n/a", g.fail_open_suspects].forEach(function (v, i) { var td = document.createElement("td"); td.textContent = v; if (i === 0) { td.className = "g"; td.style.color = gcol[n] || ""; } tr.appendChild(td); });
+    [L(n), g.reached, g.blocked, g.enforced_inline, g.latency_ms ? g.latency_ms.p95 : "n/a", g.fail_open_suspects].forEach(function (v, i) { var td = document.createElement("td"); td.textContent = v; if (i === 0) { td.className = "g"; td.style.color = gcol[n] || ""; } tr.appendChild(td); });
     tbl.appendChild(tr); });
   var sg = $("signals"); sg.innerHTML = "";
   (data.signals || []).filter(function (s) { return !s.route || s.route === route || !route; }).forEach(function (s) {

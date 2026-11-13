@@ -112,3 +112,28 @@ def test_each_gateway_that_sends_data_gets_its_own_box_with_nodes_routes_and_mod
     assert r["events"] > 0 and r["models"] and set(r["models"]) <= set(g["models"])       # the model behind the route is named
     page = get("/dashboard", raw=True)
     assert 'id="where"' in page and 'id="gws"' in page and "You are looking at gateway" in page
+
+
+def test_a_guardrail_can_be_given_a_name_and_every_view_uses_it(traffic):
+    def put(name, label):
+        req = urllib.request.Request(f"{EVAL}/api/labels/{name}", data=json.dumps({"label": label}).encode(), method="PUT", headers={"Content-Type": "application/json"})
+        with OPEN.open(req, timeout=30) as r:
+            return json.loads(r.read())
+    try:
+        assert put("onyx", "Shield One")["labels"] == {"onyx": "Shield One"}
+        o = get(f"/api/overview?window_s=60&route={ROUTE}")
+        g = next(g for g in o["guardrails"] if g["name"] == "onyx")
+        assert g["label"] == "Shield One" and any(p.startswith("Shield One looked at") for p in o["plain"])
+        assert all("onyx" not in (s["summary"] or "") for s in o["signals"])
+        chain = get("/passive/summary?window_s=60")["routes"][ROUTE]["chain"]
+        assert next(c for c in chain if c["name"] == "onyx")["label"] == "Shield One"
+        reqs = get(f"/api/requests?limit=100&route={ROUTE}&result=stopped")["requests"]
+        assert any(r["result"] == "stopped by Shield One" for r in reqs) and all(r["result"] != "stopped by onyx" for r in reqs)
+        names = [x["name"] for x in get(f"/api/timeseries?window_s=60&route={ROUTE}")["outcomes"]]
+        assert "stopped by Shield One" in names and "stopped by onyx" not in names
+    finally:
+        assert put("onyx", "")["labels"] == {}
+    assert next(g for g in get(f"/api/overview?window_s=60&route={ROUTE}")["guardrails"] if g["name"] == "onyx")["label"] == "onyx"
+    page = get("/dashboard", raw=True)
+    assert "chain?route=" in page and "Rename" in page
+    assert 'QS.get("route")' in get("/chain", raw=True)
