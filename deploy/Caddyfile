@@ -4,10 +4,15 @@
 # tells the collector that a request came in from outside and must carry a session. Two paths are for machines:
 #   /ingest/*  gateways post events here with the collector's token
 #   /kong/*    the demo Kong, which asks for its own API key
+#   /mock-llm/* the stand-in model
 {$EYES_DOMAIN} {
 	encode gzip
 	handle_path /kong/* {
 		reverse_proxy kong:8000
+	}
+	# the stand-in model (canned answers, no key): lets a gateway elsewhere carry demo traffic without paying a provider
+	handle_path /mock-llm/* {
+		reverse_proxy mock-llm:8080
 	}
 	handle {
 		reverse_proxy evaluator:8000 {

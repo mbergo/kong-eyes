@@ -1,358 +1,356 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kong Eyes</title>
 <style>
-/* One page that answers "is the guardrail doing its job?" for someone who has never opened Kong.
-   Colour means one thing each: teal reached the model, crimson was stopped, amber waited and was let through.
-   Panels are outlined, never filled; only data marks carry fill. */
-:root { --ground:#EEF1F4; --ink:#14213D; --muted:#56627A; --line:#C4CDD9; --served:#0E8F7E; --stopped:#C8324A; --waited:#A66A12; --guard:#4353C4; --other:#7D8798;
-  --read: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif; --ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif; }
-@media (prefers-color-scheme: dark) { :root { color-scheme: dark; --ground:#0F1522; --ink:#E6EAF2; --muted:#9AA6BC; --line:#2C374B; --served:#3CCFBA; --stopped:#FF7A8C; --waited:#F2B95C; --guard:#97A3FF; --other:#8792A8; } }
-:root[data-theme="dark"] { color-scheme: dark; --ground:#0F1522; --ink:#E6EAF2; --muted:#9AA6BC; --line:#2C374B; --served:#3CCFBA; --stopped:#FF7A8C; --waited:#F2B95C; --guard:#97A3FF; --other:#8792A8; }
-:root[data-theme="light"] { color-scheme: light; --ground:#EEF1F4; --ink:#14213D; --muted:#56627A; --line:#C4CDD9; --served:#0E8F7E; --stopped:#C8324A; --waited:#A66A12; --guard:#4353C4; --other:#7D8798; }
+/* Typefaces are served by the collector itself (SIL Open Font License, see static/fonts): nothing is fetched from another site. */
+@font-face { font-family: "Space Grotesk"; font-weight: 300 700; font-display: swap; src: url(fonts/space-grotesk-latin.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 400 600; font-display: swap; src: url(fonts/jetbrains-mono-latin.woff2) format("woff2"); }
+/* One screen: gateways on the left, the chosen route on the right. Colours and type follow the Sm4rt-Q system:
+   steel surfaces, one orange thing (the route you are looking at), blue for "reached the model". */
+:root { color-scheme: light; --surface:#eef0f2; --raised:#ffffff; --steel:#aeb5bc; --ink:#1b1f24; --muted:#4f5760; --border:#c5cbd1; --ctl:#7b848d;
+  --orange:#f26b1d; --on-orange:#1b1f24; --warn:#b8470a; --blue:#2f6fdb; --link:#2458b8; --ok:#1f7a45; --bad:#c02a2a; --seg1:#3a4148; --seg2:#7b848d; --seg3:#a9b0b7;
+  --ui:"Space Grotesk", system-ui, sans-serif; --mono:"JetBrains Mono", ui-monospace, monospace; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; --surface:#14171b; --raised:#1f242a; --steel:#3a4148; --ink:#e8ebee; --muted:#a3abb3; --border:#353b42; --ctl:#5a626b;
+  --orange:#ff7a2e; --on-orange:#14171b; --warn:#ff9a5c; --blue:#5b8ff0; --link:#8fb3ff; --ok:#4cc47f; --bad:#ff6b6b; --seg1:#aeb5bc; --seg2:#6f7882; --seg3:#4d555d; } }
+:root[data-theme="dark"] { color-scheme: dark; --surface:#14171b; --raised:#1f242a; --steel:#3a4148; --ink:#e8ebee; --muted:#a3abb3; --border:#353b42; --ctl:#5a626b;
+  --orange:#ff7a2e; --on-orange:#14171b; --warn:#ff9a5c; --blue:#5b8ff0; --link:#8fb3ff; --ok:#4cc47f; --bad:#ff6b6b; --seg1:#aeb5bc; --seg2:#6f7882; --seg3:#4d555d; }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--ground); color: var(--ink); font: 15px/1.5 var(--ui); font-variant-numeric: tabular-nums; }
-main { max-width: 1240px; margin: 0 auto; padding: 20px 24px 64px; }
-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 22px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
-header h1 { font: 600 20px var(--ui); margin: 0; letter-spacing: -.01em; }
-header nav { display: flex; gap: 6px; flex-wrap: wrap; } header nav a { font: 500 13px var(--ui); padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; color: inherit; text-decoration: none; }
-header nav a:hover, header nav a:focus-visible { border-color: currentColor; }
-#connect pre { overflow-x: auto; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; line-height: 1.5; }
-#connect p, #connect li { max-width: 72ch; } #connect button { font: 500 13px var(--ui); padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; background: none; color: inherit; cursor: pointer; }
-header .sp { flex: 1; } #stamp { color: var(--muted); font-size: 13px; }
-select, button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
-button { cursor: pointer; } button[aria-pressed="true"] { border-color: var(--ink); font-weight: 600; }
-select:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--guard); outline-offset: 2px; }
-.seg { display: inline-flex; gap: 6px; }
-#plain { font: 400 22px/1.42 var(--read); max-width: 62ch; margin: 26px 0 6px; }
-#plain p { margin: 0 0 .5em; } #plain .n { font-weight: 700; }
-.served { color: var(--served); } .stopped { color: var(--stopped); } .waited { color: var(--waited); } .guard { color: var(--guard); }
-h2 { font: 600 16px var(--ui); margin: 38px 0 4px; } h2 + .sub { color: var(--muted); margin: 0 0 12px; max-width: 78ch; font-size: 14px; }
-.panel { border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; }
-#flow svg { width: 100%; height: auto; display: block; } #flow text { font: 13px var(--ui); fill: var(--ink); } #flow .small { font-size: 12px; fill: var(--muted); }
-.guards { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; }
-.g { border-left: 4px solid var(--guard); }
-.g h3 { margin: 0; font: 600 17px var(--ui); color: var(--guard); } .g .big { font: 600 34px/1.1 var(--ui); margin: 6px 0 2px; }
-.g dl { display: grid; grid-template-columns: 1fr auto; gap: 7px 14px; margin: 12px 0 0; } .g dt { color: var(--muted); } .g dd { margin: 0; text-align: right; font-weight: 600; }
-.g .why { grid-column: 1 / -1; font-size: 13px; color: var(--muted); margin: -4px 0 4px; }
-.two { display: grid; grid-template-columns: 3fr 2fr; gap: 14px; } @media (max-width: 900px) { .two { grid-template-columns: 1fr; } #plain { font-size: 19px; } }
-.chart svg { display: block; max-width: 100%; } .chart text { font: 11.5px var(--ui); fill: var(--muted); }
-.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; margin-top: 6px; } .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
-.look { display: grid; gap: 10px; } .look .panel { border-left: 4px solid var(--waited); } .look .info { border-left-color: var(--other); }
-#where { margin: 14px 0 10px; font-size: 15px; } #where b { font-weight: 600; }
-.gws { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-bottom: 8px; }
-.gw { border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; min-width: 0; } .gw.on { border-color: var(--guard); box-shadow: inset 4px 0 0 var(--guard); }
-.gwtop { display: flex; align-items: baseline; gap: 10px; } .gwtop h3 { margin: 0; font: 600 16px var(--ui); overflow-wrap: anywhere; } .gwtop span { margin-left: auto; font-weight: 600; font-size: 13px; }
-.gw .k { margin: 2px 0 10px; color: var(--muted); font-size: 13px; } .gw .you { margin: 10px 0 0; color: var(--guard); font-weight: 600; font-size: 13px; }
-.gw dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 13.5px; } .gw dt { color: var(--muted); } .gw dd { margin: 0; overflow-wrap: anywhere; }
-.gw button { font: 500 13px var(--ui); padding: 3px 10px; margin: 0 6px 4px 0; border: 1px solid var(--line); border-radius: 999px; background: none; color: inherit; cursor: pointer; }
-.gw button.sel { border-color: var(--guard); color: var(--guard); }
-.rename { font: 500 12px var(--ui); padding: 2px 9px; margin-left: 10px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--muted); cursor: pointer; vertical-align: middle; }
-.rename:hover, .rename:focus-visible { color: var(--ink); border-color: currentColor; }
-.g h3 form { display: flex; gap: 6px; align-items: center; } .g h3 input { font: inherit; flex: 1; min-width: 0; padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: none; color: inherit; }
-.gw a { color: inherit; } .gw .go { margin: 10px 0 0; font-size: 13px; }
-.look h3 { margin: 0 0 4px; font: 600 15px var(--ui); } .look p { margin: 2px 0; max-width: 86ch; } .look .k { color: var(--muted); }
-table { border-collapse: collapse; width: 100%; font-size: 13.5px; } th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
-td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; } td.num { text-align: right; white-space: nowrap; } td.t { white-space: nowrap; color: var(--muted); }
-td.p { max-width: 46ch; } .steps { white-space: nowrap; } .steps b { font-weight: 600; }
-.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; } .empty { color: var(--muted); padding: 14px 0; }
-details { margin-top: 34px; } summary { cursor: pointer; font-weight: 600; } details dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; max-width: 90ch; } details dt { font-weight: 600; } details dd { margin: 0; color: var(--muted); }
-#err { color: var(--stopped); margin-top: 10px; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--surface); color: var(--ink); font: 15px/22px var(--ui); }
+a { color: var(--link); } a:hover { color: var(--ink); }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+.mono { font-family: var(--mono); font-size: 13px; } .muted { color: var(--muted); } .small { font-size: 13px; line-height: 18px; } .lbl { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; padding: 8px 24px; background: var(--steel); }
+.brand { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 600; } .brand i { width: 12px; height: 12px; background: var(--orange); border-radius: 2px; display: block; }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.seg button, .btn { min-height: 36px; padding: 0 12px; background: transparent; border: 1px solid var(--ctl); border-radius: 4px; }
+.seg button[aria-pressed="true"] { background: var(--surface); border-color: var(--ink); font-weight: 600; }
+header .sp { flex: 1 1 0; } header nav { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 20px; font-size: 14px; } header nav a { color: var(--ink); min-height: 36px; display: flex; align-items: center; }
+#stamp { font-size: 13px; }
+.page { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; padding: 16px 24px 24px; max-width: 1680px; margin: 0 auto; }
+aside { flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+main { flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--raised); border: 1px solid var(--border); border-radius: 4px; padding: 12px 16px; }
+.card h2 { margin: 0 0 8px; font-size: 15px; line-height: 22px; font-weight: 600; }
+.gw { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.gwtop { display: flex; align-items: center; gap: 8px; } .gwtop a { color: inherit; font-weight: 600; overflow-wrap: anywhere; } .gwtop span { margin-left: auto; font-size: 13px; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: block; background: var(--ctl); } .dot.on { background: var(--ok); }
+.routes { display: flex; flex-direction: column; gap: 4px; }
+.routes button { min-height: 48px; padding: 6px 10px; text-align: left; background: transparent; border: 1px solid var(--ctl); border-radius: 4px; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.routes button b { font: 500 13px/18px var(--mono); overflow-wrap: anywhere; } .routes button span { font-size: 12px; line-height: 16px; }
+.routes button[aria-pressed="true"] { background: var(--orange); border-color: var(--orange); color: var(--on-orange); }
+#where { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; } #where h1 { margin: 0; font-size: 22px; line-height: 28px; font-weight: 600; overflow-wrap: anywhere; }
+#where .lbl { flex-basis: 100%; } #where .go { margin-left: auto; font-size: 14px; }
+#err { color: var(--bad); } #err:empty { display: none; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 16px; }
+.kpis .card b { display: block; font-size: 28px; line-height: 34px; font-weight: 600; font-variant-numeric: tabular-nums; }
+#flowbar { display: flex; gap: 2px; height: 28px; } #flowbar i { display: block; min-width: 4px; border-radius: 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 24px; margin-top: 8px; font-size: 13px; line-height: 18px; } .legend span { display: flex; align-items: center; gap: 8px; } .legend i { width: 10px; height: 10px; border-radius: 2px; display: block; flex: none; }
+.two { display: flex; flex-wrap: wrap; gap: 16px; align-items: stretch; } .two .wide { flex: 999 1 520px; min-width: 0; } .two .side { flex: 1 1 280px; min-width: 0; }
+.scroll { overflow-x: auto; }
+.grow, .ghead { display: grid; grid-template-columns: minmax(190px, 2fr) repeat(4, minmax(84px, 1fr)) minmax(150px, 1.4fr); gap: 12px; align-items: center; }
+.gtable { min-width: 740px; } .ghead { padding: 6px 0; border-bottom: 1px solid var(--border); } .gitem { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.gname { display: flex; align-items: center; gap: 8px; min-width: 0; } .gname b { font-weight: 600; overflow-wrap: anywhere; }
+.gname form { display: flex; gap: 6px; align-items: center; flex: 1; min-width: 0; } .gname input { font: inherit; flex: 1; min-width: 0; padding: 4px 8px; border: 1px solid var(--ctl); border-radius: 2px; background: none; color: inherit; }
+.rename { min-height: 28px; padding: 0 8px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; font-size: 12px; }
+.rename:hover { color: var(--ink); border-color: var(--ctl); }
+.share { display: block; height: 4px; background: var(--border); border-radius: 2px; margin-top: 4px; } .share i { display: block; height: 4px; background: var(--seg1); border-radius: 2px; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; } .tag { font-size: 12px; line-height: 16px; font-weight: 600; padding: 2px 6px; border: 1px solid var(--muted); border-radius: 2px; } .tag.warn { border-color: var(--ink); }
+.why { margin-top: 4px; font-size: 13px; line-height: 18px; color: var(--muted); max-width: 96ch; }
+.look > div { padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--border); } .look b { display: block; font-size: 14px; line-height: 20px; font-weight: 600; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px 20px; border-bottom: 1px solid var(--border); margin: -8px 0 10px; }
+.tabs button { min-height: 44px; padding: 0 2px; background: transparent; border: 0; border-bottom: 2px solid transparent; font-weight: 600; font-size: 14px; color: var(--muted); }
+.tabs button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; line-height: 20px; } th { text-align: left; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--muted); padding: 4px 12px 4px 0; white-space: nowrap; }
+td { padding: 5px 12px 5px 0; border-top: 1px solid var(--border); vertical-align: top; } td.t, td.c { font: 13px/20px var(--mono); color: var(--muted); white-space: nowrap; } td.w, td.num { white-space: nowrap; } td.p { max-width: 46ch; }
+td.w i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 8px; } .steps { white-space: nowrap; color: var(--muted); } .steps b { font-weight: 600; color: var(--ink); }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 16px; } .chart svg { display: block; max-width: 100%; } .chart text { font: 11.5px var(--ui); fill: var(--muted); }
+.words { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 12px 24px; font-size: 14px; line-height: 20px; } .words dt { font-weight: 600; } .words dd { margin: 0; color: var(--muted); }
+pre { overflow-x: auto; padding: 12px 14px; border: 1px solid var(--border); border-radius: 4px; font: 13px/20px var(--mono); margin: 8px 0; } #connect p, #connect li { max-width: 80ch; }
+.empty { color: var(--muted); padding: 8px 0; }
 </style>
 <script>/* fetch from the page's own address, so a link opened as https://user:password@host/ still works */
 (function(){var f=window.fetch,base=location.origin+location.pathname;window.fetch=function(u,o){if(typeof u==="string"&&!/^[a-z][a-z0-9+.-]*:/i.test(u))u=new URL(u,base).href;return f.call(window,u,o).then(function(r){if(r.status===401&&r.headers.get('x-koe-login'))location.href='/login?next='+encodeURIComponent(location.pathname+location.search);return r;});};})();</script>
 </head>
 <body>
-<main>
 <header>
-  <h1>Kong Eyes</h1>
-  <label>Route <select id="route" aria-label="Route"></select></label>
-  <span class="seg" id="win" role="group" aria-label="Time window"></span>
-  <span class="sp"></span>
-  <nav aria-label="Pages"><a href="chain">3D live flow</a><a href="demo">Demo console</a><a href="#connect">Connect your Kong</a><a href="logout" id="signout" hidden>Sign out</a></nav>
+  <div class="brand"><i aria-hidden="true"></i>Kong Eyes</div>
+  <div class="seg" id="win" role="group" aria-label="Time window"></div>
   <span id="stamp"></span>
+  <div class="sp"></div>
+  <nav aria-label="Pages"><a href="chain" id="nav3d">3D live flow</a><a href="demo">Demo console</a><a href="#connect" id="navconnect">Connect your Kong</a><a href="logout" id="signout" hidden>Sign out</a></nav>
 </header>
-<div id="err" role="alert"></div>
-<p id="where" aria-live="polite"></p>
-<div class="gws" id="gws"><div class="gw">No gateway has reported yet. One appears here a few seconds after its first request.</div></div>
-<section id="plain" aria-live="polite"></section>
-
-
-<h2>Where the requests went</h2>
-<p class="sub">Read it left to right. The band is every request that came in; its thickness is how many. What a guardrail stops falls away below it. What is left on the right reached the model.</p>
-<div class="panel" id="flow"></div>
-
-<h2>Each guardrail</h2>
-<p class="sub">A guardrail is a checkpoint in front of the model. These are measurements of what it did, not a verdict on whether it was right.</p>
-<div class="guards" id="guards"></div>
-
-<h2>Over time</h2>
-<p class="sub">Each bar is a slice of the window. A colour that suddenly grows is something starting to happen: an attack, a guardrail slowing down, or a rule catching more than before.</p>
-<div class="two">
-  <div class="panel chart"><div id="c1"></div><div class="legend" id="l1"></div></div>
-  <div class="panel chart"><div id="c2"></div><div class="legend" id="l2"></div></div>
+<div class="page">
+  <aside aria-label="Gateways">
+    <div class="lbl">Gateways reporting here</div>
+    <div id="gws" style="display:flex;flex-direction:column;gap:8px"><div class="card gw muted small">No gateway has reported yet. One appears here a few seconds after its first request.</div></div>
+  </aside>
+  <main>
+    <div id="where" aria-live="polite"></div>
+    <div id="err" role="alert"></div>
+    <div class="kpis" id="kpis"></div>
+    <section class="card"><h2>Where the requests went</h2><div id="flowbar" role="img"></div><div class="legend" id="flowlegend"></div></section>
+    <div class="two">
+      <section class="card wide"><h2>Guardrails, in the order Kong runs them</h2><div class="scroll"><div class="gtable">
+        <div class="ghead lbl"><div>Guardrail</div><div>Looked at</div><div>Stopped</div><div>Time added</div><div>Unchecked</div><div>Check for</div></div>
+        <div id="guards"></div></div></div></section>
+      <section class="card side"><h2>Worth a look</h2><div class="look" id="look"></div>
+        <div class="lbl" style="font-weight:400">Places to look, not verdicts. Real traffic carries no labels, so nothing here proves a guardrail right or wrong.</div></section>
+    </div>
+    <section class="card">
+      <div class="tabs" id="tabs" role="group" aria-label="Details"></div>
+      <div id="tab-requests">
+        <div class="tools"><span class="seg" id="filter" role="group" aria-label="Show"></span><button class="btn" id="pause" aria-pressed="false">Pause the list</button><span class="small muted" id="reqsub"></span></div>
+        <div class="scroll" id="reqs"></div>
+      </div>
+      <div id="tab-time" hidden>
+        <div class="charts">
+          <div><div class="lbl">What happened to requests</div><div class="chart" id="c1"></div><div class="legend" id="l1"></div></div>
+          <div><div class="lbl">How long requests took</div><div class="chart" id="c2"></div><div class="legend" id="l2"></div></div>
+        </div>
+      </div>
+      <div id="tab-words" hidden>
+        <dl class="words">
+          <div><dt>Request</dt><dd>One question sent to the AI model through the gateway.</dd></div>
+          <div><dt>Guardrail</dt><dd>A checkpoint in front of the model. It reads each request and can stop it.</dd></div>
+          <div><dt>Stopped</dt><dd>The gateway refused the request, so it never reached the model.</dd></div>
+          <div><dt>Unchecked</dt><dd>The guardrail took about as long as its time limit and the request went on without a decision. This is what a guardrail that fails open looks like from outside.</dd></div>
+          <div><dt>Over-flagging</dt><dd>Stopping honest requests. Hinted when a guardrail stops a large share, or stopped callers get through on a retry.</dd></div>
+          <div><dt>Under-flagging</dt><dd>Letting bad requests pass. Hinted when requests go through unchecked, or a later guardrail stops what this one let by.</dd></div>
+          <div><dt>Time added</dt><dd>How long requests wait in the guardrail: the typical case, and the slowest one in twenty.</dd></div>
+          <div><dt>Window</dt><dd>All numbers cover the last few minutes or hours picked at the top, and slide forward as time passes.</dd></div>
+        </dl>
+      </div>
+      <div id="tab-connect" hidden>
+        <div id="connect">
+        <p>One command on a machine that can reach your Kong. It adds three plugins that already ship with Kong (nothing to install or build) to one route, and they report each request's outcome and timing here. Prompts are not sent. Your guardrail is not changed. <code>koe disconnect</code> removes everything it added.</p>
+        <p><strong>A Kong you run yourself</strong> (Docker, a VM, Kubernetes):</p>
+        <pre id="connect-cmd">loading…</pre>
+        <p><button class="btn" id="connect-copy" type="button">Copy the command</button></p>
+        <p><strong>Konnect, Kong's cloud:</strong> create a personal access token in Konnect (your avatar, Personal access tokens) and use it in place of the Admin API address:</p>
+        <pre id="connect-cmd-k">loading…</pre>
+        <p><button class="btn" id="connect-copy-k" type="button">Copy the command</button></p>
+        <ol>
+          <li>Run it. On Konnect it first asks which control plane. Then it lists the entry points (routes) your Kong has, with their paths and plugins, and asks which one carries the AI traffic.</li>
+          <li>It then shows what it will add and asks before changing anything.</li>
+          <li>Send traffic through that route. The gateway appears in the list on the left by itself.</li>
+        </ol>
+        </div>
+      </div>
+    </section>
+  </main>
 </div>
-
-<h2>Worth a look</h2>
-<p class="sub">Patterns in the numbers that deserve a person's attention. Each one says what was seen, what it could mean, and what to check. None of them proves a fault.</p>
-<div class="look" id="look"></div>
-
-<h2>Requests, one by one</h2>
-<p class="sub" id="reqsub"></p>
-<div class="panel">
-  <div class="tools"><span class="seg" id="filter" role="group" aria-label="Show"></span><button id="pause" aria-pressed="false">Pause the list</button></div>
-  <div id="reqs"></div>
-</div>
-
-<details>
-  <summary>What the words mean</summary>
-  <dl>
-    <dt>Request</dt><dd>One question sent to the AI model through the gateway.</dd>
-    <dt>Guardrail</dt><dd>A checkpoint that reads each request before the model sees it and can stop it.</dd>
-    <dt>Stopped</dt><dd>The gateway refused the request. It never reached the model.</dd>
-    <dt>Waited, then let through</dt><dd>The guardrail took about as long as its time limit and the request went on. This is what a guardrail that fails open looks like from outside, so the request may not have been checked. It can also be a guardrail that was simply slow and did answer.</dd>
-    <dt>Time in the guardrail</dt><dd>How long the checkpoint held a request. "Typical" is the middle request; "slowest 5%" is what the unlucky ones saw.</dd>
-    <dt>Tried again and got through</dt><dd>A caller was stopped, changed the wording, and passed. Either an honest person rephrasing after a wrong stop, or someone stepping around the rule. Reading a few of those requests tells you which.</dd>
-    <dt>Window</dt><dd>All numbers cover the last few minutes or hours you picked at the top, and slide forward as time passes.</dd>
-  </dl>
-</details>
-<h2 id="connect">Connect your Kong</h2>
-<section>
-<p>One command on a machine that can reach your Kong's Admin API. It adds three plugins that already ship with Kong
-(nothing to install or build) to one route, and they report each request's outcome and timing here. Prompts are not sent.
-Your guardrail is not changed. <code>koe disconnect</code> removes everything it added.</p>
-<p><strong>A Kong you run yourself</strong> (Docker, a VM, Kubernetes):</p>
-<pre id="connect-cmd">loading…</pre>
-<p><button id="connect-copy" type="button">Copy the command</button></p>
-<p><strong>Konnect, Kong's cloud:</strong> create a personal access token in Konnect (your avatar, Personal access tokens) and use it in place of the Admin API address:</p>
-<pre id="connect-cmd-k">loading…</pre>
-<p><button id="connect-copy-k" type="button">Copy the command</button></p>
-<ol>
-<li>Run it. On Konnect it first asks which control plane. Then it lists the entry points (routes) your Kong has, with their paths and plugins, and asks which one carries the AI traffic.</li>
-<li>It then shows what it will add and asks before changing anything.</li>
-<li>Send traffic through that route, then pick it in the selector at the top of this page.</li>
-</ol>
-</section>
-</main>
-<script>
-fetch('api/session').then(r => r.json()).then(s => { if (s.sign_in) document.getElementById('signout').hidden = false; }).catch(() => {});
-fetch('api/connect').then(r => r.json()).then(c => {
-  const cmd = 'git clone https://github.com/mbergo/kong-eyes && cd kong-eyes\n' +
-    'export KONG_ADMIN_URL=http://localhost:8001   # where your Kong answers its Admin API\n' +
-    'bin/koe connect \\\n  --ingest-url ' + c.ingest_url + (c.ingest_token ? ' \\\n  --ingest-token ' + c.ingest_token : '');
-  document.getElementById('connect-cmd').textContent = cmd;
-  const tail = cmd.slice(cmd.indexOf('bin/koe connect'));
-  const cmdK = 'git clone https://github.com/mbergo/kong-eyes && cd kong-eyes\n' + 'export KONNECT_TOKEN=kpat_...   # your Konnect personal access token\n' + tail;
-  document.getElementById('connect-cmd-k').textContent = cmdK;
-  document.getElementById('connect-copy-k').onclick = e => navigator.clipboard.writeText(cmdK).then(() => { e.target.textContent = 'Copied'; });
-  document.getElementById('connect-copy').onclick = e => navigator.clipboard.writeText(cmd.replace(/\\\n\s*/g, '')).then(() => { e.target.textContent = 'Copied'; });
-}).catch(() => { document.getElementById('connect-cmd').textContent = 'Could not load the connection details.'; });
-</script>
 <script>
 (function () {
 "use strict";
 var $ = function (id) { return document.getElementById(id); }, NS = "http://www.w3.org/2000/svg";
 var qs = new URLSearchParams(location.search), th = qs.get("theme"); if (th === "dark" || th === "light") document.documentElement.setAttribute("data-theme", th);
 var WINDOWS = [[60, "1 min"], [300, "5 min"], [3600, "1 hour"], [21600, "6 hours"]];
-var st = { window_s: +qs.get("window_s") || 300, route: qs.get("route") || "", filter: "", paused: false, ov: null };
+var TABS = [["requests", "Requests, one by one"], ["time", "Over time"], ["words", "What the words mean"], ["connect", "Connect your Kong"]];
+var st = { window_s: +qs.get("window_s") || 300, route: qs.get("route") || "", filter: "", paused: false, ov: null, editing: false, tab: location.hash === "#connect" ? "connect" : "requests" };
+var GW = [], seq = 0;
 function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 function el(tag, attrs, text) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
 function h(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 function n(x) { return (x || 0).toLocaleString(); }
 function pct(x) { return x == null ? "n/a" : (x * 100 < 10 && x > 0 ? (x * 100).toFixed(1) : Math.round(x * 100)) + "%"; }
 function ms(x) { return x == null ? "n/a" : (x >= 1000 ? (x / 1000).toFixed(1) + " s" : Math.round(x) + " ms"); }
+function ago(sec) { return sec < 90 ? Math.round(sec) + " s ago" : sec < 5400 ? Math.round(sec / 60) + " min ago" : Math.round(sec / 3600) + " h ago"; }
+function span() { for (var i = 0; i < WINDOWS.length; i++) if (WINDOWS[i][0] === st.window_s) return "last " + WINDOWS[i][1]; return "last " + Math.round(st.window_s) + " s"; }
 function get(path) { return fetch(path).then(function (r) { if (!r.ok) throw new Error(path + " answered " + r.status); return r.json(); }); }
-function colorFor(name, i) { if (name === "served") return css("--served"); if (name.indexOf("waited") === 0) return css("--waited"); if (name === "unknown" || name === "gateway error") return css("--other");
-  return [css("--stopped"), "#8E55D9", "#C96A1B", "#2F7FD1"][i % 4]; }
+function fail(e) { $("err").textContent = "Could not reach the collector: " + e.message; }
+function colorFor(name, i) { if (name === "served") return css("--blue"); if (name.indexOf("waited") === 0) return css("--warn"); if (name.indexOf("stopped") === 0) return css(["--seg1", "--seg2", "--seg3"][i % 3]); return css("--border"); }
+function gatewayOf(route) { return GW.filter(function (g) { return g.routes.some(function (r) { return r.name === route; }); })[0]; }
 
 function controls() {
   var w = $("win"); w.innerHTML = "";
-  WINDOWS.forEach(function (x) { var b = h("button", "", x[1]); b.setAttribute("aria-pressed", st.window_s === x[0] ? "true" : "false");
+  WINDOWS.forEach(function (x) { var b = h("button", "", x[1]); b.type = "button"; b.setAttribute("aria-pressed", st.window_s === x[0] ? "true" : "false");
     b.onclick = function () { st.window_s = x[0]; controls(); load(); }; w.appendChild(b); });
   var f = $("filter"); f.innerHTML = "";
-  [["", "All"], ["stopped", "Stopped"], ["waited", "Waited"], ["served", "Reached the model"]].forEach(function (x) { var b = h("button", "", x[1]);
+  [["", "All"], ["stopped", "Stopped"], ["waited", "Waited"], ["served", "Reached the model"]].forEach(function (x) { var b = h("button", "", x[1]); b.type = "button";
     b.setAttribute("aria-pressed", st.filter === x[0] ? "true" : "false"); b.onclick = function () { st.filter = x[0]; controls(); loadReqs(); }; f.appendChild(b); });
+  var t = $("tabs"); t.innerHTML = "";
+  TABS.forEach(function (x) { var b = h("button", "", x[1]); b.type = "button"; b.setAttribute("aria-pressed", st.tab === x[0] ? "true" : "false"); b.onclick = function () { tab(x[0]); }; t.appendChild(b);
+    $("tab-" + x[0]).hidden = st.tab !== x[0]; });
 }
-function plain(o) {
-  var p = $("plain"); p.innerHTML = "";
-  o.plain.forEach(function (line) { var e = h("p"); line.split(/(\d[\d,.]*%?)/).forEach(function (part, i) { e.appendChild(i % 2 ? h("span", "n", part) : document.createTextNode(part)); }); p.appendChild(e); });
+function tab(id) { st.tab = id; controls(); if (id === "time") loadCharts(); }
+
+// ---- the left rail: one card per gateway, its routes as buttons; the orange one is what the page shows
+function rail() {
+  var box = $("gws"), cur = st.ov && st.ov.route, known = {};
+  if (!GW.length && !(st.ov && st.ov.routes.length)) return;
+  box.textContent = "";
+  function routeButton(name, sub) { var b = h("button"); b.type = "button"; b.setAttribute("aria-pressed", name === cur ? "true" : "false"); b.appendChild(h("b", "", name)); b.appendChild(h("span", "", sub));
+    b.onclick = function () { st.route = name; load(); }; return b; }
+  GW.forEach(function (g) {
+    var c = h("section", "card gw"), top = h("div", "gwtop"), first = (g.routes.filter(function (r) { return r.name === cur; })[0] || g.routes[0] || {}).name || "";
+    top.appendChild(h("i", "dot" + (g.sending ? " on" : ""))); var a = h("a", "", g.name); a.href = "chain?route=" + encodeURIComponent(first); a.title = "Open this gateway in the 3D live flow"; top.appendChild(a);
+    top.appendChild(h("span", "", g.sending ? "sending" : "quiet, " + ago(g.seconds_since_last))); c.appendChild(top);
+    c.appendChild(h("div", "small muted", [g.kong_versions.length ? "Kong " + g.kong_versions.join(", ") : "", g.on_this_server ? "runs on this server" : g.environments.join(", "), n(g.events) + " events"].filter(Boolean).join(", ")));
+    var rs = h("div", "routes"); g.routes.forEach(function (r) { known[r.name] = true; rs.appendChild(routeButton(r.name, "Model: " + (r.models.join(", ") || "none seen yet"))); }); c.appendChild(rs);
+    if (g.nodes.length) c.appendChild(h("div", "lbl", "Sends from " + (g.nodes[0].name || g.nodes[0].address) + (g.nodes.length > 1 ? " and " + (g.nodes.length - 1) + " more" : "")));
+    box.appendChild(c);
+  });
+  var rest = ((st.ov && st.ov.routes) || []).filter(function (r) { return !known[r.name]; });
+  if (rest.length) { var c = h("section", "card gw"); c.appendChild(h("div", "gwtop")).appendChild(h("b", "", GW.length ? "Other routes with data" : "Routes with data"));
+    c.appendChild(h("div", "small muted", "Their gateway has not reported since the collector last started."));
+    var rs = h("div", "routes"); rest.forEach(function (r) { rs.appendChild(routeButton(r.name, n(r.requests) + " requests in this window")); }); c.appendChild(rs); box.appendChild(c); }
+}
+function where() {
+  var box = $("where"); box.textContent = ""; if (!st.ov || !st.ov.route) { box.appendChild(h("div", "muted", "No route has traffic yet. Connect a Kong, or start the demo traffic.")); return; }
+  var route = st.ov.route, gw = gatewayOf(route), r = gw && gw.routes.filter(function (x) { return x.name === route; })[0];
+  box.appendChild(h("div", "lbl", "You are looking at gateway"));
+  box.appendChild(h("h1", "", gw ? gw.name : "(not identified yet)")); box.appendChild(h("span", "mono", route));
+  box.appendChild(h("span", "small muted", [gw && gw.kong_versions.length ? "Kong " + gw.kong_versions.join(", ") : "", "model " + (r && r.models.length ? r.models.join(", ") : "none seen yet"), span()].filter(Boolean).join(", ")));
+  var a = h("a", "go", "Open this gateway in the 3D live flow"); a.href = "chain?route=" + encodeURIComponent(route); box.appendChild(a);
+  $("nav3d").href = a.href;
+}
+function kpis(o) {
+  var t = o.totals, box = $("kpis"), gm = t.gateway_ms || {}; box.textContent = "";
+  [["Came in", n(t.requests), "requests on this route"],
+   ["Reached the model", n(t.served), t.requests ? pct(t.served / t.requests) + " of what came in" : "nothing came in"],
+   ["Stopped at the gateway", n(t.stopped), t.requests ? pct(t.stopped_share) + (t.stopped_elsewhere ? ", " + n(t.stopped_elsewhere) + " before the guardrails" : "") : "nothing came in"],
+   ["Went through unchecked", n(t.waited), t.waited ? "waited for a time limit" : "none in this window"],
+   ["Time through the gateway", ms(gm.p50), gm.p95 != null ? "slowest 5%: " + ms(gm.p95) : "no answered requests yet"]]
+    .forEach(function (k) { var c = h("div", "card"); c.appendChild(h("div", "lbl", k[0])); c.appendChild(h("b", "", k[1])); c.appendChild(h("div", "small muted", k[2])); box.appendChild(c); });
 }
 function flow(o) {
-  var box = $("flow"); box.innerHTML = "";
-  var t = o.totals, gs = o.guardrails;
-  if (!t.requests) { box.appendChild(h("div", "empty", "No requests in this window. Send some traffic through the route, or pick a longer window.")); return; }
-  var W = 1160, top = 46, H = 120, scale = H / t.requests, svg = el("svg", { viewBox: "0 0 " + W + " 300", role: "img", "aria-label": "Flow of requests through the guardrails" });
-  var before = t.stopped_elsewhere || 0;      // stops that no guardrail made: a wrong key, a rate limit
-  var stages = []; if (before) stages.push({ label: "Not a guardrail", stopped: before, in_: t.requests, c: css("--other"), plain: "for example a wrong key or a rate limit" });
-  gs.forEach(function (g) { stages.push({ label: g.label, stopped: g.stopped, in_: g.reached, waited: g.fail_open, c: css("--guard"), guard: true }); });
-  var x0 = 150, x1 = W - 190, step = stages.length ? (x1 - x0) / stages.length : 0, alive = t.requests, x = 20;
-  svg.appendChild(el("text", { x: 20, y: 24, "font-weight": 600 }, "Came in")); svg.appendChild(el("text", { x: 20, y: 40, class: "small" }, n(t.requests) + " requests"));
-  function band(xa, xb, count, color, op) { svg.appendChild(el("rect", { x: xa, y: top + 10, width: Math.max(0, xb - xa), height: Math.max(1.5, count * scale), fill: color, opacity: op })); }
-  stages.forEach(function (s, i) {
-    var gx = x0 + step * i + step / 2, hin = Math.max(1.5, alive * scale), out = Math.max(0, alive - s.stopped), hout = Math.max(out ? 1.5 : 0, out * scale);
-    band(x, gx, alive, css("--served"), .55);
-    if (s.stopped) {   // the stopped part falls away below the band
-      var ya = top + 10 + hout, yb = top + 10 + hin, d = "M" + gx + " " + ya + " C" + (gx + 50) + " " + ya + " " + (gx + 30) + " 232 " + (gx + 78) + " 232 L" + (gx + 78) + " " + (232 + Math.max(3, (yb - ya))) +
-        " C" + (gx + 20) + " " + (232 + Math.max(3, (yb - ya))) + " " + (gx + 40) + " " + yb + " " + gx + " " + yb + " Z";
-      svg.appendChild(el("path", { d: d, fill: css("--stopped"), opacity: .6 }));
-      svg.appendChild(el("text", { x: gx + 86, y: 240, fill: css("--stopped"), "font-weight": 600, style: "fill:" + css("--stopped") }, n(s.stopped) + " stopped"));
-      svg.appendChild(el("text", { x: gx + 86, y: 256, class: "small" }, s.guard ? pct(s.in_ ? s.stopped / s.in_ : 0) + " of what it saw" : s.plain));
-    }
-    if (s.waited) { svg.appendChild(el("rect", { x: gx + 4, y: top + 10, width: 46, height: Math.max(2, s.waited * scale), fill: css("--waited"), opacity: .9 }));
-      svg.appendChild(el("text", { x: gx + 8, y: top + 2, style: "fill:" + css("--waited"), "font-weight": 600 }, n(s.waited) + " waited, let through")); }
-    svg.appendChild(el("rect", { x: gx - 5, y: top, width: 10, height: H + 20, fill: "none", stroke: s.c, "stroke-width": 2, rx: 3 }));
-    svg.appendChild(el("text", { x: gx, y: top - (s.waited ? 22 : 10), "text-anchor": "middle", "font-weight": 600, style: "fill:" + s.c }, s.label));
-    alive = out; x = gx;
-  });
-  band(x, W - 180, alive, css("--served"), .55);
-  svg.appendChild(el("text", { x: W - 170, y: top + 28, "font-weight": 600, style: "fill:" + css("--served") }, "Reached the model"));
-  svg.appendChild(el("text", { x: W - 170, y: top + 46, class: "small" }, n(alive) + " requests, " + pct(alive / t.requests)));
-  box.appendChild(svg);
+  var t = o.totals, bar = $("flowbar"), lg = $("flowlegend"); bar.textContent = ""; lg.textContent = "";
+  if (!t.requests) { lg.appendChild(h("span", "muted", "No requests in this window. Send some traffic through the route, or pick a longer window.")); bar.removeAttribute("aria-label"); return; }
+  var parts = [{ label: "Reached the model", count: t.served, color: css("--blue") }];
+  o.guardrails.forEach(function (g, i) { if (g.stopped) parts.push({ label: "Stopped by " + g.label, count: g.stopped, color: css(["--seg1", "--seg2", "--seg3"][i % 3]) }); });
+  if (t.stopped_elsewhere) parts.push({ label: "Stopped before the guardrails (a wrong key, a rate limit)", count: t.stopped_elsewhere, color: css("--border") });
+  bar.setAttribute("aria-label", "Of " + n(t.requests) + " requests: " + parts.map(function (p) { return p.label.toLowerCase() + " " + n(p.count); }).join(", "));
+  parts.forEach(function (p) { if (!p.count) return; var i = h("i"); i.style.width = (p.count / t.requests * 100) + "%"; i.style.background = p.color; i.title = p.label + ": " + n(p.count); bar.appendChild(i);
+    var s = h("span"), sw = h("i"); sw.style.background = p.color; s.appendChild(sw); s.appendChild(document.createTextNode(p.label + " ")); s.appendChild(h("b", "num", n(p.count))); s.appendChild(h("span", "muted", pct(p.count / t.requests))); lg.appendChild(s); });
+  if (t.waited) lg.appendChild(h("span", "", n(t.waited) + " of those that reached the model went through unchecked"));
 }
-function rename(g, hd) {
-  st.editing = true; hd.textContent = "";
+function reading(g, i, gs) {
+  var passed = Math.max(0, g.reached - g.stopped), later = 0, by = [], notes = [], over = false, under = false;
+  gs.slice(i + 1).forEach(function (x) { if (x.stopped) { later += x.stopped; by.push(x.label); } });
+  if (g.reached >= 20 && g.stopped_share >= 0.15) { over = true; notes.push("It stops " + pct(g.stopped_share) + " of what it sees, which is a lot: read a few stopped requests to see whether they were honest."); }
+  if (g.retries_after_stop >= 5 && g.retries_got_through / g.retries_after_stop >= 0.3) { over = true; notes.push(n(g.retries_got_through) + " of " + n(g.retries_after_stop) + " stopped callers got through on their next try. Honest rewordings mean over-flagging; tricks mean the rule is easy to step around."); }
+  if (g.fail_open > 0) { under = true; notes.push(n(g.fail_open) + " request(s) waited for its time limit and went through unchecked."); }
+  if (passed >= 20 && later / passed >= 0.05) { under = true; notes.push(n(later) + " request(s) it let through were then stopped by " + by.join(" and ") + "."); }
+  if (g.flagged_but_served) notes.push(n(g.flagged_but_served) + " flagged but still answered, which is normal if it is set to watch only.");
+  if (!g.exact_timing) notes.push("Its time is not exact: it shares a measuring point with another plugin.");
+  if (!notes.length) notes.push(g.reached < 20 ? "Too few requests yet to say anything." : "No sign of over-flagging or under-flagging in this window.");
+  return { tags: (over ? ["over-flagging?"] : []).concat(under ? ["under-flagging?"] : []), notes: notes };
+}
+function rename(g, cell) {
+  st.editing = true; cell.textContent = "";
   var f = document.createElement("form"), inp = document.createElement("input"), ok = h("button", "rename", "Save"), no = h("button", "rename", "Cancel");
   inp.value = g.label; inp.maxLength = 40; inp.setAttribute("aria-label", "Name for " + g.name); no.type = "button";
-  function done() { st.editing = false; load(); gateways(); }
+  function done() { st.editing = false; load(); }
   no.onclick = done;
   f.onsubmit = function (e) { e.preventDefault();
     fetch("api/labels/" + encodeURIComponent(g.name), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: inp.value }) })
       .then(function (r) { if (!r.ok) throw new Error("answered " + r.status); done(); })
-      .catch(function (e) { $("err").textContent = "Could not save the name: " + e.message; done(); }); };
-  f.appendChild(inp); f.appendChild(ok); f.appendChild(no); hd.appendChild(f); inp.focus(); inp.select();
+      .catch(function (e) { done(); $("err").textContent = "Could not save the name: " + e.message; }); };
+  f.appendChild(inp); f.appendChild(ok); f.appendChild(no); cell.appendChild(f); inp.focus(); inp.select();
 }
 function guards(o) {
-  var box = $("guards"); box.innerHTML = "";
-  if (!o.guardrails.length) { box.appendChild(h("div", "empty", "No guardrail was seen on this route in this window.")); return; }
-  o.guardrails.forEach(function (g) {
-    var c = h("div", "panel g"), hd = h("h3", "", g.label), rn = h("button", "rename", "Rename"); rn.type = "button"; rn.title = "Give this guardrail a name people recognise";
-    rn.onclick = function () { rename(g, hd); }; hd.appendChild(rn); c.appendChild(hd);
-    if (g.label !== g.name) c.appendChild(h("div", "why", "Kong knows it as " + g.name + "."));
-    var big = h("div", "big"); big.appendChild(h("span", g.stopped_share >= .3 ? "stopped" : "", pct(g.stopped_share))); big.appendChild(h("span", "", " stopped")); big.lastChild.style.cssText = "font-size:16px;font-weight:400;color:var(--muted)"; c.appendChild(big);
-    var dl = h("dl");
-    function row(k, v, why, cls) { dl.appendChild(h("dt", "", k)); var d = h("dd", cls || "", v); dl.appendChild(d); if (why) dl.appendChild(h("div", "why", why)); }
-    row("Requests it looked at", n(g.reached)); row("Requests it stopped", n(g.stopped));
-    row("Typical time it takes", ms(g.time_ms.median), "Slowest 5%: " + ms(g.time_ms.p95) + (g.timeout_ms ? ". Its time limit is " + ms(g.timeout_ms) + "." : ".") + (g.exact_timing ? "" : " It shares a measuring point with another plugin, so this time is not exact."));
-    row("Waited, then let through", n(g.fail_open), g.fail_open ? "They took about as long as its time limit and went on. They may not have been checked: look at the guardrail's backend and at what it is set to do when it times out." : "None in this window.", g.fail_open ? "waited" : "");
-    if (g.retries_after_stop) row("Stopped callers who tried again", n(g.retries_after_stop), n(g.retries_got_through) + " of them got through on the next try. Read a few to see whether they were honest rewordings or someone stepping around the rule.", g.retries_got_through ? "waited" : "");
-    if (g.flagged_but_served) row("Flagged but still answered", n(g.flagged_but_served), "It saw a problem and the caller got the answer anyway. Normal if it is set to watch only.", "waited");
-    if (g.rewrites) row("Requests it changed", n(g.rewrites), "The text was different after the guardrail than before it, for example something masked.");
-    c.appendChild(dl); box.appendChild(c);
+  var box = $("guards"), gs = o.guardrails; box.textContent = "";
+  if (!gs.length) { box.appendChild(h("div", "empty", "No guardrail was seen on this route in this window.")); return; }
+  gs.forEach(function (g, i) {
+    var rd = reading(g, i, gs), item = h("div", "gitem"), row = h("div", "grow num"), nameCell = h("div"), nm = h("div", "gname"), rn = h("button", "rename", "Rename");
+    rn.type = "button"; rn.setAttribute("aria-label", "Rename " + g.label); rn.onclick = function () { rename(g, nm); };
+    nm.appendChild(h("b", "", g.label)); nm.appendChild(rn); nameCell.appendChild(nm);
+    nameCell.appendChild(h("div", "lbl", (i + 1) + " of " + gs.length + (g.label !== g.name ? ", Kong plugin " + g.name : "")));
+    row.appendChild(nameCell); row.appendChild(h("div", "", n(g.reached)));
+    var sc = h("div"); sc.appendChild(document.createTextNode(n(g.stopped) + " (" + pct(g.stopped_share) + ")")); var sh = h("span", "share"), fill = h("i"); fill.style.width = Math.min(100, g.stopped_share * 100) + "%"; sh.appendChild(fill); sc.appendChild(sh); row.appendChild(sc);
+    var tm = g.time_ms, tc = h("div"); tc.appendChild(document.createTextNode(ms(tm.median)));
+    tc.appendChild(h("div", "lbl", "slowest 5%: " + ms(tm.p95) + (tm.max != null && tm.max > 2 * (tm.p95 || 0) + 5 ? ", longest " + ms(tm.max) : "") + (g.timeout_ms ? ", limit " + ms(g.timeout_ms) : ""))); row.appendChild(tc);
+    row.appendChild(h("div", "", n(g.fail_open)));
+    var tg = h("div", "tags"); (rd.tags.length ? rd.tags : ["nothing stands out"]).forEach(function (t) { tg.appendChild(h("span", "tag" + (rd.tags.length ? " warn" : ""), t)); }); row.appendChild(tg);
+    item.appendChild(row); item.appendChild(h("div", "why", rd.notes.join(" "))); box.appendChild(item);
   });
 }
-function axis(svg, W, H, max, fmt, start, step, nb) {
-  [0, .5, 1].forEach(function (f) { var y = 10 + (H - 34) * (1 - f); svg.appendChild(el("line", { x1: 40, x2: W, y1: y, y2: y, stroke: css("--line"), "stroke-width": 1 }));
-    svg.appendChild(el("text", { x: 36, y: y + 4, "text-anchor": "end" }, fmt(max * f))); });
+var KIND = { suspected_fail_open: "Requests went through unchecked", retry_gets_through: "Stopped callers got through on a retry", high_block_rate: "It stops a large share", slow_guardrail: "A slow guardrail",
+             no_verdict: "No decision was recorded", detected_not_enforced: "Flagged but still answered" };
+function look(o) {
+  var box = $("look"); box.textContent = "";
+  if (!o.signals.length) { var d = h("div"); d.appendChild(h("b", "", "Nothing stands out")); d.appendChild(h("div", "small muted", "No pattern on this route in this window needs a person to look.")); box.appendChild(d); }
+  o.signals.forEach(function (s) { var d = h("div"); d.appendChild(h("b", "", KIND[s.kind] || (s.kind || "").replace(/[_:]/g, " "))); d.appendChild(h("div", "small muted", s.summary)); box.appendChild(d); });
+  var f = o.findings;      // written from the totals only, for the whole gateway: shown beside this route's patterns, never instead of them
+  if (f && f.items.length && f.provider && f.provider.indexOf("stub") < 0 && Date.now() - f.generated_at_ms < 15 * 60000)
+    f.items.forEach(function (x) { var d = h("div"); d.appendChild(h("b", "", x.title)); d.appendChild(h("div", "small muted", [x.observed, x.could_mean, x.next_check].filter(Boolean).join(" ")));
+      d.appendChild(h("div", "lbl", "Written by " + f.provider + " from the totals, for the whole gateway")); box.appendChild(d); });
+}
+function reqs(d) {
+  var box = $("reqs"); box.textContent = "";
+  $("reqsub").textContent = d.prompts_on ? "" : "The text of requests is not being collected.";
+  if (!d.requests.length) { box.appendChild(h("div", "empty", "No requests match.")); return; }
+  var t = h("table"), hr = h("tr"); ["Time", "What happened", "Took", "Time at each checkpoint", "Caller"].concat(d.prompts_on ? ["What was asked"] : []).forEach(function (x) { hr.appendChild(h("th", "", x)); }); t.appendChild(hr);
+  d.requests.forEach(function (r) { var tr = h("tr"); tr.appendChild(h("td", "t", new Date(r.at_ms).toLocaleTimeString()));
+    var kind = r.result === "served" ? "served" : r.result.indexOf("waited") === 0 ? "waited" : r.result.indexOf("stopped") === 0 ? "stopped" : "", w = h("td", "w"), sw = h("i");
+    sw.style.background = colorFor(kind || "other", 0); w.appendChild(sw); w.appendChild(document.createTextNode(r.result === "served" ? "Reached the model" : r.result.charAt(0).toUpperCase() + r.result.slice(1))); tr.appendChild(w);
+    tr.appendChild(h("td", "num", ms(r.total_ms)));
+    var s = h("td", "steps"); (r.steps || []).forEach(function (x, i) { if (i) s.appendChild(document.createTextNode(", ")); s.appendChild(h("b", "", x.plugin)); s.appendChild(document.createTextNode(" " + ms(x.ms) + (x.stopped ? " (stopped here)" : ""))); }); tr.appendChild(s);
+    tr.appendChild(h("td", "c", r.caller || "")); if (d.prompts_on) tr.appendChild(h("td", "p", r.prompt || "")); t.appendChild(tr); });
+  box.appendChild(t);
+}
+function axis(svg, W, H, max, start, step, nb) {
+  [0, .5, 1].forEach(function (f) { var y = 10 + (H - 34) * (1 - f); svg.appendChild(el("line", { x1: 40, x2: W, y1: y, y2: y, stroke: css("--border"), "stroke-width": 1 }));
+    svg.appendChild(el("text", { x: 36, y: y + 4, "text-anchor": "end" }, Math.round(max * f))); });
   [0, .5, 1].forEach(function (f) { var t = new Date(start + step * nb * f); svg.appendChild(el("text", { x: 40 + (W - 40) * f, y: H - 4, "text-anchor": f === 0 ? "start" : f === 1 ? "end" : "middle" },
     t.toLocaleTimeString([], st.window_s > 600 ? { hour: "2-digit", minute: "2-digit" } : { hour: "2-digit", minute: "2-digit", second: "2-digit" }))); });
 }
 function charts(ts) {
-  var c1 = $("c1"), l1 = $("l1"); c1.innerHTML = ""; l1.innerHTML = "";
-  var W = Math.max(300, c1.clientWidth), H = 220, nb = ts.buckets, bw = (W - 40) / nb;
-  var tot = []; for (var i = 0; i < nb; i++) { tot[i] = 0; ts.outcomes.forEach(function (o) { tot[i] += o.values[i] || 0; }); }
-  var max = Math.max.apply(null, tot.concat([1])), svg = el("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, role: "img", "aria-label": "What happened to requests over time" });
-  axis(svg, W, H, max, function (v) { return Math.round(v); }, ts.start_ms, ts.step_ms, nb);
-  var stoppedIdx = 0;
-  ts.outcomes.forEach(function (o) { o.color = colorFor(o.name, o.name.indexOf("stopped") === 0 ? stoppedIdx++ : 0); });
+  var c1 = $("c1"), l1 = $("l1"); c1.textContent = ""; l1.textContent = "";
+  var W = Math.max(300, c1.clientWidth), H = 190, nb = ts.buckets, bw = (W - 40) / nb, tot = [];
+  for (var i = 0; i < nb; i++) { tot[i] = 0; ts.outcomes.forEach(function (o) { tot[i] += o.values[i] || 0; }); }
+  var max = Math.max.apply(null, tot.concat([1])), svg = el("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, role: "img", "aria-label": "What happened to requests over time" }), si = 0;
+  axis(svg, W, H, max, ts.start_ms, ts.step_ms, nb);
+  ts.outcomes.forEach(function (o) { o.color = colorFor(o.name, o.name.indexOf("stopped") === 0 ? si++ : 0); });
   for (var b = 0; b < nb; b++) { var y = 10 + (H - 34); ts.outcomes.forEach(function (o) { var v = o.values[b] || 0; if (!v) return; var hh = v / max * (H - 34); y -= hh;
     svg.appendChild(el("rect", { x: 40 + b * bw + .5, y: y, width: Math.max(1, bw - 1), height: hh, fill: o.color })); }); }
   c1.appendChild(svg);
-  ts.outcomes.forEach(function (o) { var s = h("span"); var i = h("i"); i.style.background = o.color; s.appendChild(i);
+  ts.outcomes.forEach(function (o) { var s = h("span"), sw = h("i"); sw.style.background = o.color; s.appendChild(sw);
     s.appendChild(document.createTextNode((o.name === "served" ? "reached the model" : o.name) + ": " + n(o.values.reduce(function (a, c) { return a + c; }, 0)))); l1.appendChild(s); });
   if (!ts.outcomes.length) l1.textContent = "No requests in this window.";
-
-  var c2 = $("c2"), l2 = $("l2"); c2.innerHTML = ""; l2.innerHTML = "";
-  W = Math.max(300, c2.clientWidth); bw = (W - 40) / nb;
-  var lines = [["Whole gateway, typical (ms)", ts.gateway_ms.median, css("--other")], ["Whole gateway, slowest 5% (ms)", ts.gateway_ms.p95, css("--ink")], ["In the guardrail, slowest 5% (ms)", ts.guardrail_ms.p95, css("--guard")]];
-  var m2 = 1; lines.forEach(function (l) { l[1].forEach(function (v) { if (v != null && v > m2) m2 = v; }); });
+  var c2 = $("c2"), l2 = $("l2"); c2.textContent = ""; l2.textContent = ""; W = Math.max(300, c2.clientWidth); bw = (W - 40) / nb;
+  var lines = [["Whole gateway, typical (ms)", ts.gateway_ms.median, css("--muted")], ["Whole gateway, slowest 5% (ms)", ts.gateway_ms.p95, css("--ink")], ["In the guardrails, slowest 5% (ms)", ts.guardrail_ms.p95, css("--blue")]], m2 = 1;
+  lines.forEach(function (l) { l[1].forEach(function (v) { if (v != null && v > m2) m2 = v; }); });
   var s2 = el("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, role: "img", "aria-label": "How long requests took over time" });
-  axis(s2, W, H, m2, function (v) { return Math.round(v); }, ts.start_ms, ts.step_ms, nb);
+  axis(s2, W, H, m2, ts.start_ms, ts.step_ms, nb);
   lines.forEach(function (l) { var d = "", pen = false; l[1].forEach(function (v, i) { if (v == null) { pen = false; return; } var x = 40 + (i + .5) * bw, y = 10 + (H - 34) * (1 - v / m2); d += (pen ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1); pen = true; });
     if (d) s2.appendChild(el("path", { d: d, fill: "none", stroke: l[2], "stroke-width": 2, "stroke-linejoin": "round" }));
-    var s = h("span"); var i = h("i"); i.style.background = l[2]; s.appendChild(i); s.appendChild(document.createTextNode(l[0])); l2.appendChild(s); });
+    var s = h("span"), sw = h("i"); sw.style.background = l[2]; s.appendChild(sw); s.appendChild(document.createTextNode(l[0])); l2.appendChild(s); });
   c2.appendChild(s2);
 }
-function look(o) {
-  var box = $("look"); box.innerHTML = "";
-  if (!o.signals.length) box.appendChild(h("div", "empty", "Nothing stands out on this route in this window."));
-  o.signals.forEach(function (s) { var c = h("div", "panel" + (s.severity === "warn" ? "" : " info")); c.appendChild(h("h3", "", (s.kind || "").replace(/[_:]/g, " ")));
-    c.appendChild(h("p", "", s.summary)); box.appendChild(c); });
-  // the written findings cover the whole gateway at the time they were written, so they sit beside this route's patterns and never replace them
-  var f = o.findings;
-  if (f && f.items.length && f.provider && f.provider.indexOf("stub") < 0 && Date.now() - f.generated_at_ms < 15 * 60000) {
-    box.appendChild(h("p", "sub", "In plain language, for the whole gateway, written by " + f.provider + " at " + new Date(f.generated_at_ms).toLocaleTimeString() + " from the totals only (no request text was sent):"));
-    f.items.forEach(function (x) { var c = h("div", "panel" + (x.severity === "warn" ? "" : " info")); c.appendChild(h("h3", "", x.title));
-      [["Seen", x.observed], ["Could mean", x.could_mean], ["Check", x.next_check]].forEach(function (y) { if (!y[1]) return; var p = h("p"); p.appendChild(h("span", "k", y[0] + ": ")); p.appendChild(document.createTextNode(y[1])); c.appendChild(p); }); box.appendChild(c); });
-  }
-}
-function reqs(d) {
-  var box = $("reqs"); box.innerHTML = "";
-  $("reqsub").textContent = d.prompts_on ? "The newest requests, with what happened to each, how long each checkpoint held it, and the start of what was asked."
-    : "The newest requests, with what happened to each and how long each checkpoint held it. The text of requests is not being collected, so the last column is empty.";
-  if (!d.requests.length) { box.appendChild(h("div", "empty", "No requests match.")); return; }
-  var t = h("table"), hr = h("tr"); ["Time", "What happened", "Total", "Time at each checkpoint", "Asked by", "What was asked"].forEach(function (x) { hr.appendChild(h("th", "", x)); }); t.appendChild(hr);
-  d.requests.forEach(function (r) { var tr = h("tr"); tr.appendChild(h("td", "t", new Date(r.at_ms).toLocaleTimeString()));
-    var cls = r.result === "served" ? "served" : r.result.indexOf("waited") === 0 ? "waited" : r.result.indexOf("stopped") === 0 ? "stopped" : ""; var w = h("td", cls, r.result === "served" ? "reached the model" : r.result); w.style.fontWeight = 600; tr.appendChild(w);
-    tr.appendChild(h("td", "num", ms(r.total_ms)));
-    var s = h("td", "steps"); r.steps.forEach(function (x, i) { if (i) s.appendChild(document.createTextNode("  ›  ")); var b = h("b", x.stopped ? "stopped" : "", x.plugin); s.appendChild(b); s.appendChild(document.createTextNode(" " + ms(x.ms) + (x.stopped ? ", stopped here" : ""))); }); tr.appendChild(s);
-    tr.appendChild(h("td", "", r.caller || "")); tr.appendChild(h("td", "p", r.prompt || "")); t.appendChild(tr); });
-  box.appendChild(t);
-}
-function loadReqs() { if (st.paused) return; get("api/requests?limit=60" + (st.ov && st.ov.route ? "&route=" + encodeURIComponent(st.ov.route) : "") + (st.filter ? "&result=" + st.filter : "")).then(reqs).catch(fail); }
-function fail(e) { $("err").textContent = "Could not reach the collector: " + e.message; }
-var seq = 0;
+function loadReqs() { if (st.paused) return; get("api/requests?limit=40" + (st.ov && st.ov.route ? "&route=" + encodeURIComponent(st.ov.route) : "") + (st.filter ? "&result=" + st.filter : "")).then(reqs).catch(fail); }
+function loadCharts() { if (!st.ov) return; get("api/timeseries?window_s=" + st.window_s + "&buckets=60" + (st.ov.route ? "&route=" + encodeURIComponent(st.ov.route) : "")).then(function (ts) { if (st.tab === "time") charts(ts); }).catch(fail); }
 function load() {
   if (st.editing) return;                                  // do not redraw under someone typing a name
   var mine = ++seq, q = "window_s=" + st.window_s + (st.route ? "&route=" + encodeURIComponent(st.route) : "");
-  get("api/overview?" + q).then(function (o) { if (mine !== seq) return null;      // a newer load started: drop this answer
-    st.ov = o; $("err").textContent = "";
-    var sel = $("route"), cur = o.route; if (document.activeElement !== sel) { sel.innerHTML = ""; o.routes.forEach(function (r) { var op = h("option", "", r.name + " (" + n(r.requests) + ")"); op.value = r.name; if (r.name === cur) op.selected = true; sel.appendChild(op); }); }
-    $("stamp").textContent = "Updated " + new Date(o.generated_at_ms).toLocaleTimeString();
-    plain(o); flow(o); guards(o); look(o); where();
-    return get("api/timeseries?window_s=" + st.window_s + "&buckets=60" + (o.route ? "&route=" + encodeURIComponent(o.route) : "")); }).then(function (ts) { if (!ts || mine !== seq) return; charts(ts); loadReqs(); }).catch(fail);
+  get("api/overview?" + q).then(function (o) { if (mine !== seq || st.editing) return;      // a newer load started: drop this answer
+    st.ov = o; $("err").textContent = ""; $("stamp").textContent = "Updated " + new Date(o.generated_at_ms).toLocaleTimeString();
+    where(); kpis(o); flow(o); guards(o); look(o); rail(); loadReqs(); if (st.tab === "time") loadCharts();
+  }).catch(function (e) { if (mine === seq) fail(e); });
 }
-$("route").onchange = function () { st.route = this.value; load(); };
+function gateways() { get("api/gateways").then(function (d) { GW = d.gateways; if (st.editing) return; rail(); where(); }).catch(function () {}); }
 $("pause").onclick = function () { st.paused = !st.paused; this.setAttribute("aria-pressed", st.paused ? "true" : "false"); this.textContent = st.paused ? "Resume the list" : "Pause the list"; if (!st.paused) loadReqs(); };
-var GW = [];
-function ago(sec) { return sec < 90 ? Math.round(sec) + " s ago" : sec < 5400 ? Math.round(sec / 60) + " min ago" : Math.round(sec / 3600) + " h ago"; }
-function where() {
-  var el = $("where"); el.textContent = ""; if (!st.ov || !st.ov.route) return;
-  var route = st.ov.route, gw = GW.filter(function (g) { return g.routes.some(function (r) { return r.name === route; }); })[0];
-  var r = gw && gw.routes.filter(function (x) { return x.name === route; })[0], gs = st.ov.guardrails || [];
-  function add(label, value) { el.appendChild(document.createTextNode(label)); el.appendChild(h("b", "", value)); }
-  add("You are looking at gateway ", gw ? gw.name : "(not identified yet)"); add(", route ", route);
-  if (gs.length) add(gs.length > 1 ? ". Guardrails: " : ". Guardrail: ", gs.map(function (g) { return g.label; }).join(", "));
-  add(". Model: ", r && r.models.length ? r.models.join(", ") : "none seen yet"); el.appendChild(document.createTextNode("."));
-}
-function gateways() {
-  get("api/gateways").then(function (d) {
-    GW = d.gateways; where(); if (!GW.length) return;
-    var box = $("gws"), cur = st.ov && st.ov.route; box.textContent = "";
-    GW.forEach(function (g) {
-      var mine = g.routes.some(function (r) { return r.name === cur; }), c = h("div", "gw" + (mine ? " on" : "")), top = h("div", "gwtop");
-      var first = (g.routes.filter(function (r) { return r.name === cur; })[0] || g.routes[0] || {}).name, t3 = "chain?route=" + encodeURIComponent(first || "");
-      var hh = h("h3"), ha = h("a", "", g.name); ha.href = t3; ha.title = "Open this gateway in the 3D live flow"; hh.appendChild(ha); top.appendChild(hh); top.appendChild(h("span", g.sending ? "served" : "waited", g.sending ? "sending" : "quiet")); c.appendChild(top);
-      c.appendChild(h("p", "k", [g.on_this_server ? "runs on this server" : (g.environments.join(", ") || "remote"), g.kong_versions.length ? "Kong " + g.kong_versions.join(", ") : "",
-        n(g.events) + " events", "last heard " + ago(g.seconds_since_last)].filter(Boolean).join(", ")));
-      var dl = document.createElement("dl");
-      function row(k, node) { dl.appendChild(h("dt", "", k)); var dd = document.createElement("dd"); dd.appendChild(node); dl.appendChild(dd); }
-      var rs = document.createElement("span");
-      g.routes.forEach(function (r) { var b = h("button", r.name === cur ? "sel" : "", r.name); b.type = "button"; b.setAttribute("aria-pressed", r.name === cur ? "true" : "false");
-        b.onclick = function () { st.route = r.name; load(); setTimeout(gateways, 700); }; rs.appendChild(b); });
-      row("Routes", rs);
-      row("Models", document.createTextNode(g.models.join(", ") || "none seen yet"));
-      row("Sends from", document.createTextNode(g.nodes.slice(0, 3).map(function (x) { return (x.name || "no name") + " (" + x.address + ")"; }).join(", ") + (g.nodes.length > 3 ? " and " + (g.nodes.length - 3) + " more" : "")));
-      c.appendChild(dl); var go = h("p", "go"), ga = h("a", "", "Open this gateway in the 3D live flow"); ga.href = t3; go.appendChild(ga); c.appendChild(go);
-      if (mine) c.appendChild(h("p", "you", "You are looking at this gateway."));
-      box.appendChild(c);
-    });
-  }).catch(function () {});
-}
-gateways(); setInterval(function () { if (!document.hidden) gateways(); }, 5000);
-controls(); load(); setInterval(function () { if (!document.hidden) load(); }, st.window_s <= 300 ? 3000 : 10000);
+$("navconnect").onclick = function () { tab("connect"); };
+get("api/session").then(function (s) { if (s.sign_in) $("signout").hidden = false; }).catch(function () {});
+get("api/connect").then(function (c) {
+  var run = "bin/koe connect \\\n  --ingest-url " + c.ingest_url + (c.ingest_token ? " \\\n  --ingest-token " + c.ingest_token : ""), clone = "git clone https://github.com/mbergo/kong-eyes && cd kong-eyes\n";
+  var own = clone + "export KONG_ADMIN_URL=http://localhost:8001   # where your Kong answers its Admin API\n" + run, kon = clone + "export KONNECT_TOKEN=kpat_...   # your Konnect personal access token\n" + run;
+  $("connect-cmd").textContent = own; $("connect-cmd-k").textContent = kon;
+  function copy(btn, text) { btn.onclick = function () { navigator.clipboard.writeText(text).then(function () { btn.textContent = "Copied"; }); }; }
+  copy($("connect-copy"), own); copy($("connect-copy-k"), kon);
+}).catch(function () { $("connect-cmd").textContent = "Could not load the connection details."; });
+controls(); gateways(); load();
+(function tick() { setTimeout(function () { if (!document.hidden) load(); tick(); }, st.window_s <= 300 ? 3000 : 10000); })();
+setInterval(function () { if (!document.hidden) gateways(); }, 5000);
+window.addEventListener("resize", function () { if (st.tab === "time") loadCharts(); });
 })();
 </script>
 </body>

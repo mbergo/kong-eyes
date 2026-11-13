@@ -499,6 +499,15 @@ async def passive_translate(window_s: float | None = None, include_runs: bool = 
 frontdoor.install(app)        # the sign-in page; only active on public installs
 
 
+@app.get("/fonts/{name}", include_in_schema=False)
+def font(name: str):
+    """The dashboard's two typefaces, served from here so the page needs nothing from another site."""
+    if name not in ("space-grotesk-latin.woff2", "jetbrains-mono-latin.woff2"):
+        raise HTTPException(404, "no such font")
+    with open(os.path.join(os.path.dirname(__file__), "static", "fonts", name), "rb") as f:
+        return Response(f.read(), media_type="font/woff2", headers={"Cache-Control": "public, max-age=604800"})
+
+
 @app.get("/", include_in_schema=False)
 async def home():
     """The dashboard is the home page."""
